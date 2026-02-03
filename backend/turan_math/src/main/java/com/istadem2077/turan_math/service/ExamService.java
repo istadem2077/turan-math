@@ -126,8 +126,7 @@ public class ExamService {
             // Note: DB correct key is Integer in your Entity, make sure types match!
             // If DB is String "A", Entity should be String.
             // Your DDL said VARCHAR, but Entity said Integer. Assuming String for now.
-            boolean isCorrect = question.getCorrectOptionKey()
-                    .equals(answerDTO.selectedKey());
+            boolean isCorrect = question.getCorrectOptionKey().trim().equalsIgnoreCase(answerDTO.selectedKey().trim());
 
             if (isCorrect) totalScore++;
 
@@ -155,6 +154,7 @@ public class ExamService {
         );
     }
 
+    @Transactional
     public List<StudentResultResponse> getClassroomResults(Long classroomId) {
         // 1. Fetch all submissions for the classroom
         // You might need to add 'List<ExamSubmission> findByClassroomId(Long id)' to ExamSubmissionRepository
