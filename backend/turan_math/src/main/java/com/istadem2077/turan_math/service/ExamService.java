@@ -1,6 +1,7 @@
 package com.istadem2077.turan_math.service;
 
 import com.istadem2077.turan_math.dto.ExamDTOs.*;
+
 import com.istadem2077.turan_math.entity.*;
 import com.istadem2077.turan_math.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -92,7 +93,7 @@ public class ExamService {
                 .plusMinutes(2); // Grace period
 
         if (LocalDateTime.now().isAfter(timeLimit)) {
-            // throw new RuntimeException("Time limit exceeded");
+             throw new RuntimeException("Time limit exceeded");
         }
 
         // SECURITY: Whitelist Valid Question IDs for this Class
@@ -125,7 +126,7 @@ public class ExamService {
             // Note: DB correct key is Integer in your Entity, make sure types match!
             // If DB is String "A", Entity should be String.
             // Your DDL said VARCHAR, but Entity said Integer. Assuming String for now.
-            boolean isCorrect = String.valueOf(question.getCorrectOptionKey())
+            boolean isCorrect = question.getCorrectOptionKey()
                     .equals(answerDTO.selectedKey());
 
             if (isCorrect) totalScore++;
@@ -152,5 +153,33 @@ public class ExamService {
                 validQuestionIds.size(),
                 "COMPLETED"
         );
+    }
+
+    public List<StudentResultResponse> getClassroomResults(Long classroomId) {
+        // 1. Fetch all submissions for the classroom
+        // You might need to add 'List<ExamSubmission> findByClassroomId(Long id)' to ExamSubmissionRepository
+        List<ExamSubmission> submissions = submissionRepository.findByClassroomId(classroomId);
+
+        return submissions.stream().map(submission -> {
+            // 2. Fetch answers for each submission
+            // You might need to add 'List<ExamAnswer> findBySubmissionId(Long id)' to ExamAnswerRepository
+            List<ExamAnswer> answers = examAnswerRepository.findBySubmissionId(submission.getId());
+
+            List<AnswerDetailDTO> answerDetails = answers.stream().map(a -> new AnswerDetailDTO(
+                    a.getQuestion().getId(),
+                    a.getQuestion().getContent(),
+                    a.getSelectedOptionKey(),
+                    a.getQuestion().getCorrectOptionKey(),
+                    a.getIsCorrect()
+            )).collect(Collectors.toList());
+
+            return new StudentResultResponse(
+                    submission.getStudent().getFullName(),
+                    submission.getStudent().getEmail(),
+                    submission.getTotalScore(),
+                    submission.getClassroom().getQuestions().size(),
+                    answerDetails
+            );
+        }).collect(Collectors.toList());
     }
 }

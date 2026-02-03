@@ -45,4 +45,20 @@ public class ExamDTOs {
             int totalQuestions,
             String status
     ) {}
+
+    public record StudentResultResponse(
+            String studentName,
+            String studentEmail,
+            int score,
+            int totalQuestions,
+            List<AnswerDetailDTO> answers
+    ) {}
+
+    public record AnswerDetailDTO(
+            Long questionId,
+            String questionContent,
+            String selectedKey,
+            String correctKey,
+            boolean isCorrect
+    ) {}
 }

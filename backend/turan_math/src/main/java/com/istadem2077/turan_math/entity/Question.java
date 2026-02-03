@@ -27,7 +27,7 @@ public class Question {
     private String content;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", name = "options")
+    @Column(columnDefinition = "jsonb", name = "options", nullable = false)
     private List<QuestionOption> options;
 
     @Column(nullable = false, name = "correct_option_key")

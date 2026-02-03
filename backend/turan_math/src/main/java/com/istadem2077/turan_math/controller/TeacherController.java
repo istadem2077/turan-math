@@ -1,8 +1,10 @@
 package com.istadem2077.turan_math.controller;
 
-import com.istadem2077.turan_math.dto.ClassroomDTOs.*; // NEW IMPORT
+import com.istadem2077.turan_math.dto.ClassroomDTOs.*;
+import com.istadem2077.turan_math.dto.ExamDTOs.*;
 import com.istadem2077.turan_math.entity.Classroom;
 import com.istadem2077.turan_math.service.ClassroomService;
+import com.istadem2077.turan_math.service.ExamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 public class TeacherController {
 
     private final ClassroomService classroomService;
+    private final ExamService examService;
 
     @PostMapping("/{teacherId}/classroom")
     public ResponseEntity<ClassroomResponse> createClassroom(
@@ -36,6 +39,15 @@ public class TeacherController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{teacherId}/classroom/{classroomId}/results")
+    public ResponseEntity<List<StudentResultResponse>> getClassroomResults(
+            @PathVariable Long teacherId,
+            @PathVariable Long classroomId) {
+
+        List<StudentResultResponse> results = examService.getClassroomResults(classroomId);
+        return ResponseEntity.ok(results);
     }
 
     // Helper mapper to avoid recursion
