@@ -73,7 +73,7 @@ public class ExamService {
                 classroom.getId(),
                 classroom.getTitle(),
                 classroom.getDurationMinutes(),
-                LocalDateTime.now(),
+                submission.getStartTime(),
                 questionDTOs
         );
     }

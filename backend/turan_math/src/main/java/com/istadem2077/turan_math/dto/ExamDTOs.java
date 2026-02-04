@@ -16,7 +16,7 @@ public class ExamDTOs {
             Long classroomId,
             String title,
             int durationMinutes,
-            LocalDateTime serverTime,
+            LocalDateTime submissionStartTime,
             List<QuestionDTO> questions
     ) {}
 
