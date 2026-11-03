@@ -16,7 +16,8 @@
     "db:seed:samples": "tsx prisma/seed-samples.ts",
     "postinstall": "prisma generate",
     "docker:up": "docker compose up -d --build",
-    "docker:db": "docker compose up -d db"
+    "docker:db": "docker compose up -d db",
+    "cbqb:scrape": "tsx scripts/cbqb/scrape.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -43,10 +44,15 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/turndown": "^5.0.6",
     "dotenv": "^18.0.9",
+    "linkedom": "^0.18.15",
+    "mathml-to-latex": "^1.8.0",
     "prisma": "^7.10.1",
     "tailwindcss": "^4.1.12",
     "tsx": "^4.23.15",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
   }

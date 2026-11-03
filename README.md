@@ -186,6 +186,23 @@ SPR answers are a list of accepted strings; equivalent fractions/decimals and
 Bluebook's rounding/truncation rules are accepted automatically
 (`src/lib/grading.ts`).
 
+### Importing from the College Board SAT Suite Question Bank
+
+`scripts/cbqb/scrape.ts` downloads SAT Math questions from
+satsuitequestionbank.collegeboard.org and converts them (MathML → LaTeX,
+inline SVG/images → figure files) into the import format. Run it on your own
+machine; the output goes to `data/` (git-ignored, College Board content):
+
+```bash
+npm run cbqb:scrape -- --limit 20      # test run; add --probe to inspect the raw API
+npm run cbqb:scrape                    # everything (cached in data/cbqb/raw, re-runs resume)
+npx tsx scripts/import-questions.ts data/cbqb/questions.json --figures data/cbqb/figures
+```
+
+The question bank has no public API contract; if it changes, `--probe` shows
+what it returns and `ENDPOINTS` / `normalizeItem()` in the script need updating.
+Check College Board's terms of use for how you may use the questions.
+
 To remove the dev sample questions:
 `DELETE FROM "Question" WHERE "externalId" LIKE 'sample-%';` (only if no test uses them).
 
