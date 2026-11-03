@@ -14,7 +14,9 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:samples": "tsx prisma/seed-samples.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "docker:up": "docker compose up -d --build",
+    "docker:db": "docker compose up -d db"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

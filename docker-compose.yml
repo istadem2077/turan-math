@@ -1,15 +1,54 @@
-# Local PostgreSQL for development:  docker compose up -d
+# Turan Math: app + PostgreSQL.
+#
+#   cp .env.example .env          # set SESSION_SECRET and ADMIN_PASSWORD
+#   docker compose up -d --build
+#
+# The app container waits for Postgres, applies migrations and seeds the admin
+# account on every start (both idempotent). Data lives in the `pgdata` volume.
+# For local `npm run dev`, start only the database:  docker compose up -d db
+name: turan-math
+
 services:
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: turan
-      POSTGRES_PASSWORD: turan
-      POSTGRES_DB: turan_math
+      POSTGRES_USER: ${POSTGRES_USER:-turan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-turan}
+      POSTGRES_DB: ${POSTGRES_DB:-turan_math}
     ports:
-      - "5432:5432"
+      # Localhost only; the app reaches the database over the compose network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_DESMOS_API_KEY: ${NEXT_PUBLIC_DESMOS_API_KEY:-dcb31709b452b1cf9dc26972add0fda6}
+    image: turan-math:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-turan}:${POSTGRES_PASSWORD:-turan}@db:5432/${POSTGRES_DB:-turan_math}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env (at least 32 random characters)}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Administrator}
+      # Set to true once the app is served over HTTPS (e.g. behind a reverse proxy).
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # true = also load ~760 synthetic "[Sample]" questions (development only).
+      SEED_SAMPLE_QUESTIONS: ${SEED_SAMPLE_QUESTIONS:-false}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
 volumes:
   pgdata:

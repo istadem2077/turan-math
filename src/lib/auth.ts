@@ -18,7 +18,9 @@ export async function startSession(user: { id: string; role: SessionRole; fullNa
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Browsers drop Secure cookies on plain http://, so this is configurable:
+    // set COOKIE_SECURE=true once the app is served over HTTPS.
+    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   });

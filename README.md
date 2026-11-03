@@ -8,19 +8,60 @@ digital SAT blueprint, or hand-picked.
 **Stack:** Next.js 15 (App Router, TypeScript), PostgreSQL, Prisma 7, Tailwind CSS 4,
 KaTeX (math rendering), Desmos (graphing calculator).
 
-## Quick start
+## Run with Docker (app + PostgreSQL)
+
+Requires Docker with Compose v2. Nothing else needs to be installed.
 
 ```bash
-cp .env.example .env            # then edit SESSION_SECRET and ADMIN_PASSWORD
-docker compose up -d            # or point DATABASE_URL at your own Postgres
+cp .env.example .env            # set SESSION_SECRET and ADMIN_PASSWORD
+docker compose up -d --build    # http://localhost:3000
+```
+
+On every start the app container waits for PostgreSQL, applies pending
+migrations, makes sure the skill taxonomy and admin account exist, and then
+serves. All of these steps are idempotent. Database data lives in the `pgdata`
+Docker volume.
+
+| Setting (`.env`) | Default | Notes |
+|---|---|---|
+| `SESSION_SECRET` | required | 32+ random characters (`openssl rand -hex 32`) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / required | Admin created on first start; the password is never overwritten later |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `turan` / `turan` / `turan_math` | Use URL-safe characters in the password |
+| `POSTGRES_PORT` | `5432` | Published on 127.0.0.1 only, for `npm run dev` and DB tools |
+| `APP_PORT` | `3000` | |
+| `COOKIE_SECURE` | `false` | Set `true` once served over HTTPS; over plain http it must stay `false` or login fails |
+| `SEED_SAMPLE_QUESTIONS` | `false` | `true` loads ~760 synthetic "[Sample]" questions (dev only) |
+| `NEXT_PUBLIC_DESMOS_API_KEY` | demo key | Baked in at build time: rebuild after changing |
+
+Common commands:
+
+```bash
+docker compose logs -f app            # follow app logs
+docker compose up -d --build          # deploy a new version (migrations run automatically)
+docker compose exec db psql -U turan turan_math
+docker compose down                   # stop (data kept)
+docker compose down -v                # stop and DELETE all data
+```
+
+Bulk-import a large question file into the running stack (uses your local Node.js against the published DB port):
+
+```bash
+DATABASE_URL=postgresql://turan:turan@localhost:5432/turan_math npx tsx scripts/import-questions.ts questions.json
+```
+
+## Local development
+
+```bash
+cp .env.example .env
+docker compose up -d db         # PostgreSQL only (or point DATABASE_URL at your own)
 npm install
 npm run db:migrate              # apply migrations
-npm run db:seed                 # SAT skill taxonomy + the admin account
-npm run db:seed:samples         # OPTIONAL, dev only: 760 synthetic "[Sample]" questions
+npm run db:seed:samples         # OPTIONAL: 760 synthetic "[Sample]" questions
 npm run dev                     # http://localhost:3000
 ```
 
-Production: `npm run build && npm start`.
+The dev server also creates the skill taxonomy and admin account on start
+(`npm run db:seed` does the same on demand).
 
 | Script | Purpose |
 |---|---|
