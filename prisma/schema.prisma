@@ -1,0 +1,251 @@
+// Turan Math — database model (PostgreSQL)
+//
+// Overview
+//   User ──< RoomMember >── Room ──> Test ──< TestItem >── Question >── Skill
+//                            │
+//                            └──< Attempt ──< Response >── TestItem
+//
+// * Users have exactly one role. ADMIN and PROFESSOR are staff; STUDENT
+//   accounts are created by staff and can only ever see rooms they belong to.
+// * A Test is a fixed, ordered 44-question form (2 modules x 22). It is either
+//   generated from the Bluebook blueprint or hand-picked by a professor, and can
+//   be reused by several rooms.
+// * A Room is a scheduled, proctored sitting: everyone starts at `startsAt`.
+// * An Attempt is one student's sitting in one room; a Response is their answer
+//   to one TestItem.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  PROFESSOR
+  STUDENT
+}
+
+/// The four SAT Math content domains (College Board naming).
+enum Domain {
+  ALGEBRA
+  ADVANCED_MATH
+  PROBLEM_SOLVING_DATA_ANALYSIS
+  GEOMETRY_TRIGONOMETRY
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionType {
+  /// Multiple choice, four options A–D.
+  MCQ
+  /// Student-produced response (grid-in).
+  SPR
+}
+
+enum TestSource {
+  AUTO
+  MANUAL
+}
+
+enum AttemptStatus {
+  MODULE_1
+  MODULE_2
+  SUBMITTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[] @relation("UserCreatedBy")
+
+  memberships      RoomMember[]
+  attempts         Attempt[]
+  roomsCreated     Room[]       @relation("RoomCreatedBy")
+  testsCreated     Test[]       @relation("TestCreatedBy")
+  questionsCreated Question[]   @relation("QuestionCreatedBy")
+
+  @@index([role])
+}
+
+/// SAT skill taxonomy (e.g. "Linear equations in one variable"). Seeded.
+model Skill {
+  id        Int        @id @default(autoincrement())
+  code      String     @unique
+  name      String
+  domain    Domain
+  sortOrder Int        @default(0)
+  questions Question[]
+
+  @@index([domain])
+}
+
+model Question {
+  id         String       @id @default(cuid())
+  /// Optional ID from the import source; makes re-imports idempotent.
+  externalId String?      @unique
+  domain     Domain
+  skillId    Int
+  skill      Skill        @relation(fields: [skillId], references: [id])
+  difficulty Difficulty
+  type       QuestionType
+
+  /// Markdown with $inline$ / $$display$$ LaTeX. Images via ![](url).
+  stem        String
+  /// MCQ only: [{ "key": "A", "text": "markdown" }, ...] (A–D).
+  choices     Json?
+  /// MCQ only: "A" | "B" | "C" | "D".
+  correctChoice String?
+  /// SPR only: every accepted answer, e.g. ["3/2", "1.5"]. Numeric
+  /// equivalents are also accepted at grading time.
+  sprAnswers  String[]     @default([])
+  explanation String?
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  testItems TestItem[]
+
+  // Random draws filter on these columns.
+  @@index([active, domain, difficulty, type])
+  @@index([skillId, difficulty])
+}
+
+/// Binary uploads (question figures). Served from /api/assets/:id.
+model Asset {
+  id        String   @id @default(cuid())
+  mimeType  String
+  filename  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model Test {
+  id          String     @id @default(cuid())
+  title       String
+  source      TestSource
+  createdAt   DateTime   @default(now())
+  createdById String?
+  createdBy   User?      @relation("TestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  items TestItem[]
+  rooms Room[]
+}
+
+model TestItem {
+  id         String   @id @default(cuid())
+  testId     String
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  /// 1 or 2
+  module     Int
+  /// 1..22 within the module
+  position   Int
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  responses Response[]
+
+  @@unique([testId, module, position])
+  @@unique([testId, questionId])
+}
+
+model Room {
+  id   String @id @default(cuid())
+  name String
+
+  /// Fixed start: module 1 opens for everyone at this instant.
+  startsAt          DateTime
+  /// Minutes per module (Bluebook-style; 22 by default).
+  moduleMinutes     Int      @default(22)
+  calculatorAllowed Boolean  @default(true)
+  /// Students see nothing about their performance until this is true.
+  resultsReleased   Boolean  @default(false)
+
+  testId String?
+  test   Test?   @relation(fields: [testId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("RoomCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  members  RoomMember[]
+  attempts Attempt[]
+
+  @@index([startsAt])
+}
+
+model RoomMember {
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@id([roomId, studentId])
+  @@index([studentId])
+}
+
+model Attempt {
+  id        String        @id @default(cuid())
+  roomId    String
+  room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status    AttemptStatus @default(MODULE_1)
+
+  module1StartedAt   DateTime  @default(now())
+  module1SubmittedAt DateTime?
+  module2StartedAt   DateTime?
+  module2SubmittedAt DateTime?
+
+  /// Filled in at submission.
+  rawScore    Int?
+  module1Raw  Int?
+  module2Raw  Int?
+  scaledScore Int?
+
+  responses Response[]
+
+  @@unique([roomId, studentId])
+  @@index([studentId])
+}
+
+model Response {
+  id         String   @id @default(cuid())
+  attemptId  String
+  attempt    Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testItemId String
+  testItem   TestItem @relation(fields: [testItemId], references: [id], onDelete: Cascade)
+
+  /// "A".."D" for MCQ, the typed string for SPR. Null = unanswered.
+  answer           String?
+  markedForReview  Boolean  @default(false)
+  /// MCQ choices the student crossed out (answer eliminator).
+  eliminated       String[] @default([])
+  /// Set at grading.
+  isCorrect        Boolean?
+  updatedAt        DateTime @updatedAt
+
+  @@unique([attemptId, testItemId])
+}
