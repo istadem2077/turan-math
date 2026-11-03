@@ -32,6 +32,7 @@ services:
       context: .
       args:
         NEXT_PUBLIC_DESMOS_API_KEY: ${NEXT_PUBLIC_DESMOS_API_KEY:-dcb31709b452b1cf9dc26972add0fda6}
+        SERVER_ACTIONS_ALLOWED_ORIGINS: ${SERVER_ACTIONS_ALLOWED_ORIGINS:-}
     image: turan-math:latest
     restart: unless-stopped
     depends_on:

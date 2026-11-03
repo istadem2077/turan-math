@@ -20,6 +20,9 @@ COPY . .
 # NEXT_PUBLIC_* values are inlined into the browser bundle at build time.
 ARG NEXT_PUBLIC_DESMOS_API_KEY=dcb31709b452b1cf9dc26972add0fda6
 ENV NEXT_PUBLIC_DESMOS_API_KEY=$NEXT_PUBLIC_DESMOS_API_KEY
+# Extra hosts allowed to submit forms through a proxy/tunnel (see next.config.ts).
+ARG SERVER_ACTIONS_ALLOWED_ORIGINS=""
+ENV SERVER_ACTIONS_ALLOWED_ORIGINS=$SERVER_ACTIONS_ALLOWED_ORIGINS
 RUN npm run build
 
 # ── Prisma CLI for migrations (same versions as package-lock.json) ──
