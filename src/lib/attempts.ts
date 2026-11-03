@@ -1,19 +1,19 @@
 import "server-only";
 import { db } from "./db";
 import { estimateScaled, isCorrect } from "./grading";
-import { GRACE_MS, module1Deadline, module2Deadline, roomEndsAt, type RoomTiming } from "./timing";
+import { GRACE_MS, module1Deadline, module2Deadline, quizEndsAt, type QuizTiming } from "./timing";
 import type { Attempt } from "@/generated/prisma/client";
 
-type AttemptWithRoom = Attempt & { room: RoomTiming };
+type AttemptWithQuiz = Attempt & { quiz: QuizTiming };
 
 /**
  * Applies any time-based transitions that are due (module 1 closing, module 2
  * closing). Timers are enforced here on the server; the client clock is only
  * a display.
  */
-export async function reconcileAttempt(attempt: AttemptWithRoom, now = new Date()): Promise<Attempt> {
+export async function reconcileAttempt(attempt: AttemptWithQuiz, now = new Date()): Promise<Attempt> {
   let a: Attempt = attempt;
-  const m1End = module1Deadline(attempt.room);
+  const m1End = module1Deadline(attempt.quiz);
   if (a.status === "MODULE_1" && now.getTime() > m1End.getTime() + GRACE_MS) {
     a = await db.attempt.update({
       where: { id: a.id },
@@ -21,16 +21,16 @@ export async function reconcileAttempt(attempt: AttemptWithRoom, now = new Date(
     });
   }
   if (a.status === "MODULE_2" && a.module2StartedAt) {
-    const m2End = module2Deadline(attempt.room, a.module2StartedAt);
+    const m2End = module2Deadline(attempt.quiz, a.module2StartedAt);
     if (now.getTime() > m2End.getTime() + GRACE_MS) a = await finalizeAttempt(a.id, m2End);
   }
   return a;
 }
 
-export async function reconcileRoomAttempts(roomId: string) {
+export async function reconcileQuizAttempts(quizId: string) {
   const attempts = await db.attempt.findMany({
-    where: { roomId, status: { not: "SUBMITTED" } },
-    include: { room: true },
+    where: { quizId, status: { not: "SUBMITTED" } },
+    include: { quiz: true },
   });
   for (const a of attempts) await reconcileAttempt(a);
 }
@@ -40,10 +40,10 @@ export async function finalizeAttempt(attemptId: string, submittedAt = new Date(
   return db.$transaction(async (tx) => {
     const attempt = await tx.attempt.findUniqueOrThrow({
       where: { id: attemptId },
-      include: { room: { include: { test: { include: { items: { include: { question: true } } } } } }, responses: true },
+      include: { quiz: { include: { test: { include: { items: { include: { question: true } } } } } }, responses: true },
     });
     if (attempt.status === "SUBMITTED") return attempt;
-    const items = attempt.room.test?.items ?? [];
+    const items = attempt.quiz.test?.items ?? [];
     const byItem = new Map(attempt.responses.map((r) => [r.testItemId, r]));
     const raw = [0, 0];
     for (const item of items) {
@@ -69,34 +69,36 @@ export async function finalizeAttempt(attemptId: string, submittedAt = new Date(
   });
 }
 
-/** Returns the student's attempt, creating it when the room is live. */
-export async function getOrStartAttempt(roomId: string, studentId: string, now = new Date()) {
-  const room = await db.room.findFirst({
-    where: { id: roomId, members: { some: { studentId } } },
+/** Returns the student's attempt, creating it once module 1 has opened. */
+export async function getOrStartAttempt(roomId: string, quizId: string, studentId: string, now = new Date()) {
+  // Only quizzes in a room the student belongs to.
+  const quiz = await db.quiz.findFirst({
+    where: { id: quizId, roomId, room: { members: { some: { studentId } } } },
   });
-  if (!room) return { error: "NOT_FOUND" as const };
-  if (!room.testId) return { error: "NO_TEST" as const, room };
+  if (!quiz) return { error: "NOT_FOUND" as const };
+  if (!quiz.startsAt) return { error: "NOT_OPEN" as const, quiz };
+  if (!quiz.testId) return { error: "NO_TEST" as const, quiz };
 
   const existing = await db.attempt.findUnique({
-    where: { roomId_studentId: { roomId, studentId } },
-    include: { room: true },
+    where: { quizId_studentId: { quizId, studentId } },
+    include: { quiz: true },
   });
-  if (existing) return { room, attempt: await reconcileAttempt(existing, now) };
+  if (existing) return { quiz, attempt: await reconcileAttempt(existing, now) };
 
-  if (now < room.startsAt) return { error: "NOT_STARTED" as const, room };
-  if (now >= roomEndsAt(room)) return { error: "CLOSED" as const, room };
+  if (now < quiz.startsAt!) return { error: "NOT_STARTED" as const, quiz };
+  if (now >= quizEndsAt(quiz)) return { error: "CLOSED" as const, quiz };
 
   const created = await db.attempt.upsert({
-    where: { roomId_studentId: { roomId, studentId } },
+    where: { quizId_studentId: { quizId, studentId } },
     update: {},
-    create: { roomId, studentId, module1StartedAt: now },
-    include: { room: true },
+    create: { quizId, studentId, module1StartedAt: now },
+    include: { quiz: true },
   });
-  return { room, attempt: await reconcileAttempt(created, now) };
+  return { quiz, attempt: await reconcileAttempt(created, now) };
 }
 
-export function currentDeadline(room: RoomTiming, attempt: Attempt): Date | null {
-  if (attempt.status === "MODULE_1") return module1Deadline(room);
-  if (attempt.status === "MODULE_2" && attempt.module2StartedAt) return module2Deadline(room, attempt.module2StartedAt);
+export function currentDeadline(quiz: QuizTiming, attempt: Attempt): Date | null {
+  if (attempt.status === "MODULE_1") return module1Deadline(quiz);
+  if (attempt.status === "MODULE_2" && attempt.module2StartedAt) return module2Deadline(quiz, attempt.module2StartedAt);
   return null;
 }

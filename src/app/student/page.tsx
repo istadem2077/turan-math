@@ -1,103 +1,59 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
 import { requireStudent } from "@/lib/auth";
-import { logout } from "@/app/login/actions";
-import { reconcileAttempt } from "@/lib/attempts";
-import { roomPhase } from "@/lib/timing";
-import { Badge, Empty, LinkButton } from "@/components/ui";
-import { LocalTime } from "@/components/LocalTime";
-import { Countdown } from "./Countdown";
+import { Empty } from "@/components/ui";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { StudentShell } from "./Shell";
+import { ActiveQuizCard, HomeworkRow, splitQuizzes } from "./items";
+import { loadStudentRooms, needsHandIn } from "./data";
 
 export default async function StudentHome() {
   const me = await requireStudent();
-  // Only rooms this student is a member of are ever queried.
-  const memberships = await db.roomMember.findMany({
-    where: { studentId: me.id },
-    include: { room: { include: { attempts: { where: { studentId: me.id }, include: { room: true } } } } },
-    orderBy: { room: { startsAt: "desc" } },
-  });
+  const rooms = await loadStudentRooms(me.id);
   const now = new Date();
-  const rows = await Promise.all(
-    memberships.map(async ({ room }) => {
-      const a = room.attempts[0] ? await reconcileAttempt(room.attempts[0]) : null;
-      return { room, attempt: a, phase: roomPhase(room, now) };
-    }),
-  );
-  const upcoming = rows.filter((r) => r.attempt?.status !== "SUBMITTED" && r.phase !== "FINISHED");
-  const past = rows.filter((r) => !upcoming.includes(r));
+  const { active } = splitQuizzes(rooms.flatMap((r) => r.quizzes), now);
+  active.sort((a, b) => a.startsAt!.getTime() - b.startsAt!.getTime());
+  const due = rooms.flatMap((r) => r.homeworks).filter((h) => needsHandIn(h, now));
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-navy text-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 font-black">T</div>
-            <span className="font-bold">Turan Math</span>
-          </div>
-          <form action={logout} className="flex items-center gap-4 text-sm">
-            <span className="hidden text-white/80 sm:inline">{me.fullName}</span>
-            <button className="font-semibold text-white/90 hover:text-white">Sign out</button>
-          </form>
-        </div>
-      </header>
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
-        <section>
-          <h1 className="text-2xl font-bold">Hi, {me.fullName.split(" ")[0]}</h1>
-          <p className="mt-1 text-sm text-muted">Your scheduled SAT Math tests. Each test has 2 modules of 22 questions.</p>
-        </section>
+    <StudentShell name={me.fullName}>
+      {/* Picks up quizzes the professor starts while this page is open. */}
+      <AutoRefresh seconds={20} />
+      <section>
+        <h1 className="text-2xl font-bold">Hi, {me.fullName.split(" ")[0]}</h1>
+        <p className="mt-1 text-sm text-muted">Your quizzes and homework.</p>
+      </section>
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Upcoming</h2>
-          {upcoming.length === 0 && <Empty>No upcoming tests.</Empty>}
-          {upcoming.map(({ room, attempt, phase }) => (
-            <div key={room.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-white p-5">
-              <div>
-                <div className="text-lg font-semibold">{room.name}</div>
-                <div className="text-sm text-muted">
-                  <LocalTime iso={room.startsAt.toISOString()} /> · 2 × {room.moduleMinutes} min
-                  {room.calculatorAllowed ? " · calculator allowed" : " · no calculator"}
-                </div>
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Quizzes</h2>
+        {active.length === 0 && <Empty>No quizzes right now. When your professor starts one, it appears here.</Empty>}
+        {active.map((q) => (
+          <ActiveQuizCard key={q.id} quiz={q} />
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Homework to hand in</h2>
+        {due.length === 0 && <Empty>You&apos;re all caught up.</Empty>}
+        {due.map((h) => (
+          <HomeworkRow key={h.id} hw={h} />
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">My rooms</h2>
+        {rooms.length === 0 && <Empty>You haven&apos;t been added to a room yet.</Empty>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rooms.map((r) => (
+            <Link key={r.id} href={`/student/rooms/${r.id}`} className="rounded-xl border border-line bg-white p-5 transition hover:border-brand">
+              <div className="text-lg font-semibold">{r.name}</div>
+              <div className="mt-1 text-sm text-muted">
+                {r.quizzes.length} quiz{r.quizzes.length === 1 ? "" : "zes"} · {r.homeworks.length} homework
               </div>
-              {phase === "SCHEDULED" ? (
-                <div className="text-right">
-                  <div className="text-xs text-muted">Starts in</div>
-                  <Countdown to={room.startsAt.toISOString()} />
-                </div>
-              ) : !room.testId ? (
-                <Badge tone="warn">Waiting for your professor</Badge>
-              ) : (
-                <LinkButton href={`/student/rooms/${room.id}`}>{attempt ? "Resume test" : "Start test"}</LinkButton>
-              )}
-            </div>
+              <div className="mt-2 text-xs font-semibold text-brand">Open room →</div>
+            </Link>
           ))}
-        </section>
-
-        {past.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Completed</h2>
-            {past.map(({ room, attempt }) => (
-              <div key={room.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-white p-5">
-                <div>
-                  <div className="font-semibold">{room.name}</div>
-                  <div className="text-sm text-muted">
-                    <LocalTime iso={room.startsAt.toISOString()} mode="date" />
-                  </div>
-                </div>
-                {!attempt ? (
-                  <Badge tone="bad">Missed</Badge>
-                ) : room.resultsReleased ? (
-                  <Link href={`/student/rooms/${room.id}/results`} className="text-right">
-                    <div className="text-2xl font-bold text-brand">{attempt.scaledScore}</div>
-                    <div className="text-xs font-semibold text-brand">View results →</div>
-                  </Link>
-                ) : (
-                  <Badge>Submitted · results pending</Badge>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
-      </main>
-    </div>
+        </div>
+      </section>
+    </StudentShell>
   );
 }

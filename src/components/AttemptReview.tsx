@@ -8,10 +8,10 @@ export async function AttemptReview({ attemptId }: { attemptId: string }) {
     where: { id: attemptId },
     include: {
       responses: true,
-      room: { include: { test: { include: { items: { include: { question: { include: { skill: true } } }, orderBy: [{ module: "asc" }, { position: "asc" }] } } } } },
+      quiz: { include: { test: { include: { items: { include: { question: { include: { skill: true } } }, orderBy: [{ module: "asc" }, { position: "asc" }] } } } } },
     },
   });
-  const items = attempt.room.test?.items ?? [];
+  const items = attempt.quiz.test?.items ?? [];
   const resp = new Map(attempt.responses.map((r) => [r.testItemId, r]));
 
   const byDomain = DOMAINS.map((d) => {

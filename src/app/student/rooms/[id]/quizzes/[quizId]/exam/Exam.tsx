@@ -75,7 +75,7 @@ export function Exam({ state, studentName, calculatorAllowed }: { state: ExamSta
       const patch = pending.current.get(itemId);
       if (!patch) return;
       pending.current.delete(itemId);
-      const p = saveResponse(state.roomId, itemId, patch)
+      const p = saveResponse(state.quizId, itemId, patch)
         .then((r) => {
           if (!r.ok && r.reason === "TIME_UP") router.refresh();
           else setSaveError(!r.ok);
@@ -84,7 +84,7 @@ export function Exam({ state, studentName, calculatorAllowed }: { state: ExamSta
         .finally(() => inflight.current.delete(p));
       inflight.current.add(p);
     },
-    [router, state.roomId],
+    [router, state.quizId],
   );
 
   const flush = useCallback(async () => {
@@ -108,9 +108,9 @@ export function Exam({ state, studentName, calculatorAllowed }: { state: ExamSta
     if (submitting) return;
     setSubmitting(true);
     await flush();
-    await submitModule(state.roomId, module);
+    await submitModule(state.quizId, module);
     router.refresh();
-  }, [flush, module, router, state.roomId, submitting]);
+  }, [flush, module, router, state.quizId, submitting]);
 
   // Time's up: submit automatically.
   useEffect(() => {

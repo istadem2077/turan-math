@@ -15,7 +15,7 @@ import type { Difficulty, Domain, QuestionType } from "@/generated/prisma/enums"
 
 export const QUESTIONS_PER_MODULE = 22;
 export const MODULE_COUNT = 2;
-export const DEFAULT_MODULE_MINUTES = 22;
+export const DEFAULT_MODULE_MINUTES = 27;
 
 export type ModuleSpec = {
   domains: Record<Domain, number>;

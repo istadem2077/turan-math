@@ -1,9 +1,10 @@
 # Turan Math
 
-SAT Math practice testing in a Bluebook-style environment. Professors schedule
-**rooms** (fixed-start sittings), put students in them, and attach a 44-question
-**test** that is either drawn at random from the question bank following the
-digital SAT blueprint, or hand-picked.
+SAT Math practice testing in a Bluebook-style environment. Professors put
+students into **rooms** (classrooms). In each room they run **quizzes**, each a
+44-question **test** that is either drawn at random from the question bank
+following the digital SAT blueprint, or hand-picked, and assign **homework**
+that students hand in as files and the professor grades and answers.
 
 **Stack:** Next.js 15 (App Router, TypeScript), PostgreSQL, Prisma 7, Tailwind CSS 4,
 KaTeX (math rendering), Desmos (graphing calculator).
@@ -75,16 +76,40 @@ The dev server also creates the skill taxonomy and admin account on start
 | Role | Can |
 |---|---|
 | **Admin** | Everything a professor can, plus: manage professors, create/edit/retire/import questions |
-| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, monitor live rooms, release results |
-| **Student** | See only the rooms they are assigned to; take the test; see their results once released |
+| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, create/start/schedule quizzes and monitor them live, release results, assign and grade homework |
+| **Student** | See only the rooms they are assigned to and the quizzes and homework in them; take quizzes; hand in homework; see quiz results once released and homework grades/responses once given |
 
-Students never see other students, other rooms, or answer keys. Every page and
-server action re-checks the session role and room membership on the server.
+Students never see other students, other rooms, other students' submissions, or
+answer keys. Every page, server action and file download re-checks the session
+role and room membership on the server.
+
+## Rooms, quizzes and homework
+
+A **room** is a classroom (a group of students); its page has tabs for
+Students, Quizzes, Homework and Settings.
+
+**Quizzes** have no fixed time. A new quiz waits until the professor presses
+**Start quiz**: students in the room see it immediately and get **5 minutes**
+(`LOBBY_MINUTES` in `src/lib/timing.ts`) to enter the lobby, then module 1 begins
+for everyone. Scheduling a start time instead is optional (when creating the
+quiz, or later from the quiz page); a scheduled quiz can be started early,
+rescheduled or cancelled until it begins. Unstarted quizzes are invisible to
+students. Default length: **27 minutes per module**.
+
+**Homework** has a title, instructions (Markdown + LaTeX), optional attached
+files, a due date, points, the accepted file formats (PDF, images, Word, Excel,
+PowerPoint, text, ZIP and/or custom extensions; none = any) and whether late
+hand-ins are accepted. Students hand in up to 10 files (15 MB each) plus a
+note, and can replace the hand-in until it is graded. The professor grades
+each submission with a score and/or a written response with optional files;
+grading locks the submission, and **Reopen for resubmission** unlocks it (even
+past the due date). Files are stored in PostgreSQL and served by
+`/api/files/:id` only to staff and to the students entitled to them.
 
 ## Test format
 
-* 2 modules × 22 questions, `moduleMinutes` per module (default 22).
-* **Fixed start:** module 1 opens for everyone at the room's start time and closes
+* 2 modules × 22 questions, `moduleMinutes` per module (default 27).
+* **Fixed start:** module 1 opens for everyone at the quiz's start time and closes
   for everyone `moduleMinutes` later. A student who finishes module 1 early starts
   module 2 immediately; otherwise module 2 starts when module 1 closes. Students
   can't return to module 1.
@@ -93,7 +118,7 @@ server action re-checks the session role and room membership on the server.
 * Bluebook-style UI: question navigator, Mark for Review, answer eliminator (ABC),
   Check Your Work page, Answer Preview for grid-ins, reference sheet, timer that
   can be hidden (except in the last 5 minutes), and the Desmos calculator when the
-  room allows it.
+  quiz allows it.
 * Results (estimated 200–800 score, raw score, per-domain breakdown, per-question
   review with explanations) stay hidden from students until the professor
   releases them.
@@ -115,15 +140,18 @@ thousands of questions. If an exact combination runs short, it falls back to the
 other question type, then the neighbouring difficulty, always within the same
 domain. Difficulty is not adaptive (both modules use the same mix).
 
-Every student in a room gets the same test so results are comparable
+Every student in a quiz gets the same test so results are comparable
 question by question.
 
 ## Data model (`prisma/schema.prisma`)
 
 ```
-User ──< RoomMember >── Room ──> Test ──< TestItem >── Question >── Skill
+User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem >── Question >── Skill
+                         │        │
+                         │        └──< Attempt ──< Response >── TestItem
                          │
-                         └──< Attempt ──< Response >── TestItem
+                         └──< Homework ──< HomeworkSubmission
+                                 └──── StoredFile ────┘
 ```
 
 | Table | Notes |
@@ -132,12 +160,16 @@ User ──< RoomMember >── Room ──> Test ──< TestItem >── Quest
 | `Skill` | The 19 College Board SAT Math skills, each in one `Domain` |
 | `Question` | `domain`, `skill`, `difficulty` (EASY/MEDIUM/HARD), `type` (MCQ/SPR), Markdown+LaTeX `stem`, `choices` (JSON, MCQ), `correctChoice` (MCQ), `sprAnswers[]` (SPR), `explanation`, unique `externalId` for idempotent imports, `active` (retired questions are never drawn) |
 | `Asset` | Uploaded figures (bytea), served at `/api/assets/:id` to signed-in users |
-| `Test` | A fixed 44-question form; `source` AUTO or MANUAL; reusable across rooms |
+| `Test` | A fixed 44-question form; `source` AUTO or MANUAL; reusable across quizzes |
 | `TestItem` | `(test, module, position) → question`; a question appears once per test |
-| `Room` | `startsAt`, `moduleMinutes`, `calculatorAllowed`, `resultsReleased`, `test` |
+| `Room` | A classroom: `name`, `description` |
 | `RoomMember` | Student ↔ room assignment (a student can be in several rooms) |
-| `Attempt` | One per (room, student): status, module timestamps, raw/scaled scores |
+| `Quiz` | One sitting in a room: `title`, `startsAt` (null until started/scheduled), `moduleMinutes`, `calculatorAllowed`, `resultsReleased`, `test` |
+| `Attempt` | One per (quiz, student): status, module timestamps, raw/scaled scores |
 | `Response` | One per (attempt, item): `answer`, `markedForReview`, `eliminated[]`, `isCorrect` (set at grading) |
+| `Homework` | Per room: `title`, `instructions`, `dueAt`, `allowedFormats[]` (extensions; empty = any), `maxPoints`, `allowLate` |
+| `HomeworkSubmission` | One per (homework, student): `note`, `submittedAt`, `late`, `score`, `feedback`, `gradedAt`, `reopened` |
+| `StoredFile` | Uploaded homework files (bytea): assignment attachments, student files, or files in the professor's response |
 
 ## Question bank
 

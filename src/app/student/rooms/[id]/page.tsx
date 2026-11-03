@@ -1,69 +1,67 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStudent } from "@/lib/auth";
-import { getOrStartAttempt } from "@/lib/attempts";
-import { buildExamState } from "@/lib/exam-state";
-import { LocalTime } from "@/components/LocalTime";
-import { Countdown } from "../../Countdown";
-import { Exam } from "./exam/Exam";
+import { Empty } from "@/components/ui";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { StudentShell } from "../../Shell";
+import { ActiveQuizCard, HomeworkRow, PastQuizCard, splitQuizzes } from "../../items";
+import { loadStudentRooms, needsHandIn } from "../../data";
 
-function Lobby({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <main className="grid min-h-screen place-items-center bg-white px-4">
-      <div className="w-full max-w-lg text-center">
-        <div className="bb-rule mb-8" />
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <div className="mt-4 space-y-4 text-muted">{children}</div>
-        <Link href="/student" className="mt-8 inline-block text-sm font-semibold text-brand hover:underline">
-          ← Back to my tests
-        </Link>
-      </div>
-    </main>
-  );
-}
-
-export default async function RoomExamPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StudentRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requireStudent();
   const { id } = await params;
-  const res = await getOrStartAttempt(id, me.id);
-  if ("error" in res) {
-    if (res.error === "NOT_FOUND") notFound();
-    const room = res.room!;
-    if (res.error === "NO_TEST") return <Lobby title={room.name}>Your professor hasn&apos;t attached a test to this room yet. Check back soon.</Lobby>;
-    if (res.error === "CLOSED") return <Lobby title={room.name}>This test has ended.</Lobby>;
-    return (
-      <Lobby title={room.name}>
-        <p>
-          The test starts at <LocalTime iso={room.startsAt.toISOString()} />. Stay on this page; it will open automatically.
-        </p>
-        <Countdown to={room.startsAt.toISOString()} className="font-mono text-5xl font-bold tabular-nums text-ink" />
-        <ul className="mx-auto max-w-sm space-y-1 text-left text-sm">
-          <li>• 2 modules, 22 questions each, {room.moduleMinutes} minutes per module</li>
-          <li>• Everyone starts at the same time; arriving late reduces your time in module 1</li>
-          <li>• You can&apos;t return to module 1 once you move on</li>
-          <li>• {room.calculatorAllowed ? "The Desmos graphing calculator is available" : "No calculator is allowed in this test"}</li>
-        </ul>
-      </Lobby>
-    );
-  }
+  const [room] = await loadStudentRooms(me.id, id);
+  if (!room) notFound();
+  const now = new Date();
+  const quizzes = room.quizzes.map((q) => ({ ...q, roomName: undefined }));
+  const { active, past } = splitQuizzes(quizzes, now);
+  active.sort((a, b) => a.startsAt!.getTime() - b.startsAt!.getTime());
+  const homeworks = room.homeworks.map((h) => ({ ...h, roomName: undefined }));
+  const openHw = homeworks.filter((h) => needsHandIn(h, now));
+  const doneHw = homeworks.filter((h) => !openHw.includes(h)).reverse();
 
-  const { room, attempt } = res;
-  if (attempt.status === "SUBMITTED") {
-    return (
-      <Lobby title="You're all finished!">
-        <p>Your answers have been submitted.</p>
-        {room.resultsReleased ? (
-          <Link href={`/student/rooms/${id}/results`} className="font-semibold text-brand underline">
-            View your results
-          </Link>
-        ) : (
-          <p>Your professor will release your score when it&apos;s ready.</p>
+  return (
+    <StudentShell name={me.fullName}>
+      <AutoRefresh seconds={20} />
+      <section>
+        <Link href="/student" className="text-sm font-semibold text-brand hover:underline">
+          ← Home
+        </Link>
+        <h1 className="text-2xl font-bold">{room.name}</h1>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Quizzes</h2>
+        {active.length === 0 && <Empty>No quiz right now. When your professor starts one, it appears here.</Empty>}
+        {active.map((q) => (
+          <ActiveQuizCard key={q.id} quiz={q} />
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Homework</h2>
+        {homeworks.length === 0 && <Empty>No homework in this room yet.</Empty>}
+        {openHw.map((h) => (
+          <HomeworkRow key={h.id} hw={h} />
+        ))}
+        {doneHw.length > 0 && (
+          <>
+            {openHw.length > 0 && <h3 className="pt-2 text-xs font-semibold tracking-wide text-muted uppercase">Handed in and past</h3>}
+            {doneHw.map((h) => (
+              <HomeworkRow key={h.id} hw={h} />
+            ))}
+          </>
         )}
-      </Lobby>
-    );
-  }
+      </section>
 
-  const state = await buildExamState(room, attempt);
-  if (!state) notFound();
-  return <Exam key={state.module} state={state} studentName={me.fullName} calculatorAllowed={room.calculatorAllowed} />;
+      {past.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Past quizzes</h2>
+          {past.map((q) => (
+            <PastQuizCard key={q.id} quiz={q} />
+          ))}
+        </section>
+      )}
+    </StudentShell>
+  );
 }

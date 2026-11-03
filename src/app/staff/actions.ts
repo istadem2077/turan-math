@@ -5,10 +5,10 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { generatePassword, hashPassword, requireAdmin, requireStaff } from "@/lib/auth";
 import { createTest, generateAutoTest } from "@/lib/tests";
-import { DEFAULT_MODULE_MINUTES } from "@/lib/blueprint";
 import { parseImportFile, toQuestionData } from "@/lib/question-import";
 import { MCQ_KEYS } from "@/lib/taxonomy";
 import { Prisma } from "@/generated/prisma/client";
+import { errorText } from "@/lib/errors";
 
 export type ActionResult = { ok?: boolean; error?: string; message?: string; password?: string; username?: string };
 
@@ -17,13 +17,6 @@ const USERNAME = z
   .trim()
   .toLowerCase()
   .regex(/^[a-z0-9._-]{3,32}$/, "Username: 3–32 characters, letters, digits, . _ -");
-
-function errorText(e: unknown): string {
-  if (e instanceof z.ZodError) return e.issues.map((i) => i.message).join("; ");
-  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return "That username is already taken.";
-  if (e instanceof Error) return e.message;
-  return "Something went wrong.";
-}
 
 // ───────────────────────── Users ─────────────────────────
 
@@ -52,6 +45,7 @@ export async function createStudent(_: ActionResult | undefined, form: FormData)
   if (res.ok && roomId) {
     const student = await db.user.findUniqueOrThrow({ where: { username: res.username } });
     await db.roomMember.create({ data: { roomId, studentId: student.id } });
+    revalidatePath(`/staff/rooms/${roomId}`, "layout");
   }
   return res;
 }
@@ -90,78 +84,20 @@ export async function updateStudentName(userId: string, fullName: string) {
   revalidatePath(`/staff/students/${userId}`);
 }
 
-// ───────────────────────── Rooms ─────────────────────────
-
-const RoomForm = z.object({
-  name: z.string().trim().min(1, "Room name is required").max(120),
-  startsAt: z.iso.datetime({ message: "Pick a start date and time" }),
-  moduleMinutes: z.coerce.number().int().min(1).max(180),
-  calculatorAllowed: z.boolean(),
-  testId: z.string().optional(),
-});
-
-function readRoomForm(form: FormData) {
-  return RoomForm.parse({
-    name: form.get("name"),
-    startsAt: form.get("startsAt"),
-    moduleMinutes: form.get("moduleMinutes") || DEFAULT_MODULE_MINUTES,
-    calculatorAllowed: form.get("calculatorAllowed") === "on",
-    testId: String(form.get("testId") ?? "") || undefined,
-  });
-}
-
-export async function createRoom(_: ActionResult | undefined, form: FormData): Promise<ActionResult> {
-  const me = await requireStaff();
-  let id: string;
-  try {
-    const data = readRoomForm(form);
-    const room = await db.room.create({
-      data: { ...data, startsAt: new Date(data.startsAt), createdById: me.id },
-    });
-    id = room.id;
-  } catch (e) {
-    return { error: errorText(e) };
-  }
-  redirect(`/staff/rooms/${id}`);
-}
-
-export async function updateRoom(roomId: string, _: ActionResult | undefined, form: FormData): Promise<ActionResult> {
-  await requireStaff();
-  try {
-    const data = readRoomForm(form);
-    const room = await db.room.findUniqueOrThrow({ where: { id: roomId }, include: { _count: { select: { attempts: true } } } });
-    const started = room._count.attempts > 0;
-    if (started && (data.testId ?? null) !== room.testId) return { error: "The test can't be changed after students have started." };
-    if (started && new Date(data.startsAt).getTime() !== room.startsAt.getTime())
-      return { error: "The start time can't be changed after students have started." };
-    await db.room.update({
-      where: { id: roomId },
-      data: { ...data, testId: data.testId ?? null, startsAt: new Date(data.startsAt) },
-    });
-    revalidatePath(`/staff/rooms/${roomId}`);
-    return { ok: true, message: "Room saved." };
-  } catch (e) {
-    return { error: errorText(e) };
-  }
-}
-
-export async function deleteRoom(roomId: string) {
-  await requireStaff();
-  await db.room.delete({ where: { id: roomId } });
-  redirect("/staff/rooms");
-}
+// ───────────────────────── Room membership ─────────────────────────
+// Rooms, quizzes and homework: see ./rooms/actions.ts
 
 export async function addRoomMembers(roomId: string, studentIds: string[]) {
   await requireStaff();
   const students = await db.user.findMany({ where: { id: { in: studentIds }, role: "STUDENT" }, select: { id: true } });
   await db.roomMember.createMany({ data: students.map((s) => ({ roomId, studentId: s.id })), skipDuplicates: true });
-  revalidatePath(`/staff/rooms/${roomId}`);
+  revalidatePath(`/staff/rooms/${roomId}`, "layout");
 }
 
 export async function removeRoomMember(roomId: string, studentId: string) {
   await requireStaff();
   await db.roomMember.delete({ where: { roomId_studentId: { roomId, studentId } } });
-  revalidatePath(`/staff/rooms/${roomId}`);
+  revalidatePath(`/staff/rooms/${roomId}`, "layout");
 }
 
 /** Moves a student from one room to another (keeps any attempt in the old room). */
@@ -175,8 +111,8 @@ export async function moveRoomMember(fromRoomId: string, toRoomId: string, stude
       create: { roomId: toRoomId, studentId },
     }),
   ]);
-  revalidatePath(`/staff/rooms/${fromRoomId}`);
-  revalidatePath(`/staff/rooms/${toRoomId}`);
+  revalidatePath(`/staff/rooms/${fromRoomId}`, "layout");
+  revalidatePath(`/staff/rooms/${toRoomId}`, "layout");
 }
 
 export async function setStudentRooms(studentId: string, roomIds: string[]) {
@@ -186,19 +122,6 @@ export async function setStudentRooms(studentId: string, roomIds: string[]) {
     db.roomMember.createMany({ data: roomIds.map((roomId) => ({ roomId, studentId })), skipDuplicates: true }),
   ]);
   revalidatePath(`/staff/students/${studentId}`);
-}
-
-export async function setResultsReleased(roomId: string, released: boolean) {
-  await requireStaff();
-  await db.room.update({ where: { id: roomId }, data: { resultsReleased: released } });
-  revalidatePath(`/staff/rooms/${roomId}`);
-}
-
-/** Allows a student to retake the room (deletes their attempt). */
-export async function resetAttempt(roomId: string, studentId: string) {
-  await requireStaff();
-  await db.attempt.deleteMany({ where: { roomId, studentId } });
-  revalidatePath(`/staff/rooms/${roomId}`);
 }
 
 // ───────────────────────── Tests ─────────────────────────
@@ -229,8 +152,8 @@ export async function saveManualTest(title: string, modules: string[][]): Promis
 
 export async function deleteTest(testId: string) {
   await requireStaff();
-  const used = await db.room.count({ where: { testId } });
-  if (used) throw new Error("This test is assigned to a room.");
+  const used = await db.quiz.count({ where: { testId } });
+  if (used) throw new Error("This test is assigned to a quiz.");
   await db.test.delete({ where: { id: testId } });
   redirect("/staff/tests");
 }

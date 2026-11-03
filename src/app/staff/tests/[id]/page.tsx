@@ -13,7 +13,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     where: { id },
     include: {
       items: { include: { question: { include: { skill: true } } }, orderBy: [{ module: "asc" }, { position: "asc" }] },
-      rooms: { select: { id: true, name: true } },
+      quizzes: { select: { id: true, title: true, roomId: true, room: { select: { name: true } } } },
     },
   });
   if (!test) notFound();
@@ -35,7 +35,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
             <LinkButton variant="secondary" href={`/staff/tests/new?from=${id}`}>
               Copy &amp; edit
             </LinkButton>
-            {test.rooms.length === 0 && (
+            {test.quizzes.length === 0 && (
               <ActionButton variant="danger" action={deleteTest.bind(null, id)} confirm="Delete this test?">
                 Delete
               </ActionButton>
@@ -71,14 +71,14 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
               ))}
             </tbody>
           </Table>
-          {test.rooms.length > 0 && (
+          {test.quizzes.length > 0 && (
             <p className="mt-3 text-sm text-muted">
               Used by:{" "}
-              {test.rooms.map((r, i) => (
+              {test.quizzes.map((r, i) => (
                 <span key={r.id}>
                   {i > 0 && ", "}
-                  <Link className="text-brand underline" href={`/staff/rooms/${r.id}`}>
-                    {r.name}
+                  <Link className="text-brand underline" href={`/staff/rooms/${r.roomId}/quizzes/${r.id}`}>
+                    {r.room.name}: {r.title}
                   </Link>
                 </span>
               ))}

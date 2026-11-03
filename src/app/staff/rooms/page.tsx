@@ -1,38 +1,41 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Badge, Empty, LinkButton, PageHeader, Table } from "@/components/ui";
-import { LocalTime } from "@/components/LocalTime";
-import { PHASE_LABEL, PHASE_TONE, roomPhase } from "@/lib/rooms";
+import { PHASE_LABEL, PHASE_TONE, quizPhase } from "@/lib/rooms";
 
 export default async function RoomsPage() {
-  const rooms = await db.room.findMany({
-    orderBy: { startsAt: "desc" },
-    include: { test: { select: { title: true } }, _count: { select: { members: true, attempts: true } } },
-  });
   const now = new Date();
+  const rooms = await db.room.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      _count: { select: { members: true, quizzes: true } },
+      quizzes: { where: { startsAt: { not: null, gte: new Date(now.getTime() - 6 * 3600_000) } }, orderBy: { startsAt: "asc" } },
+      homeworks: { where: { dueAt: { gte: now } }, select: { id: true } },
+    },
+  });
   return (
     <>
       <PageHeader
         title="Rooms"
-        subtitle="Each room is a scheduled sitting. Students only ever see the rooms they are assigned to."
+        subtitle="Rooms are classrooms. Students only ever see the rooms they belong to, and the quizzes and homework in them."
         actions={<LinkButton href="/staff/rooms/new">New room</LinkButton>}
       />
       {rooms.length === 0 ? (
-        <Empty>No rooms yet. Create one to schedule a test.</Empty>
+        <Empty>No rooms yet. Create one for each class or group of students.</Empty>
       ) : (
         <Table>
           <thead>
             <tr>
               <th>Room</th>
-              <th>Starts</th>
-              <th>Test</th>
               <th>Students</th>
-              <th>Status</th>
+              <th>Quizzes</th>
+              <th>Open homework</th>
+              <th>Now</th>
             </tr>
           </thead>
           <tbody>
             {rooms.map((r) => {
-              const phase = roomPhase(r, now);
+              const active = r.quizzes.map((q) => ({ q, phase: quizPhase(q, now) })).filter((x) => x.phase !== "FINISHED");
               return (
                 <tr key={r.id} className="hover:bg-canvas">
                   <td>
@@ -40,19 +43,19 @@ export default async function RoomsPage() {
                       {r.name}
                     </Link>
                   </td>
-                  <td className="whitespace-nowrap">
-                    <LocalTime iso={r.startsAt.toISOString()} />
-                  </td>
-                  <td>{r.test?.title ?? <Badge tone="bad">No test</Badge>}</td>
-                  <td>
-                    {r._count.members}
-                    {r._count.attempts > 0 && <span className="text-muted"> · {r._count.attempts} started</span>}
-                  </td>
+                  <td>{r._count.members}</td>
+                  <td>{r._count.quizzes}</td>
+                  <td>{r.homeworks.length}</td>
                   <td>
                     <div className="flex flex-wrap gap-1">
-                      <Badge tone={PHASE_TONE[phase]}>{PHASE_LABEL[phase]}</Badge>
-                      {r.resultsReleased && <Badge tone="ok">Results released</Badge>}
-                      {!r.calculatorAllowed && <Badge>No calculator</Badge>}
+                      {active.length === 0 && <span className="text-muted">—</span>}
+                      {active.map(({ q, phase }) => (
+                        <Link key={q.id} href={`/staff/rooms/${r.id}/quizzes/${q.id}`}>
+                          <Badge tone={PHASE_TONE[phase]}>
+                            {q.title}: {PHASE_LABEL[phase]}
+                          </Badge>
+                        </Link>
+                      ))}
                     </div>
                   </td>
                 </tr>

@@ -3,7 +3,7 @@ import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import { setStudentRooms, updateStudentName } from "../../actions";
 
-export function RoomAssignments({ studentId, rooms, assigned }: { studentId: string; rooms: { id: string; name: string; when: string }[]; assigned: string[] }) {
+export function RoomAssignments({ studentId, rooms, assigned }: { studentId: string; rooms: { id: string; name: string }[]; assigned: string[] }) {
   const [sel, setSel] = useState(new Set(assigned));
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -25,7 +25,6 @@ export function RoomAssignments({ studentId, rooms, assigned }: { studentId: str
               }}
             />
             <span className="font-medium">{r.name}</span>
-            <span className="ml-auto text-xs text-muted">{r.when}</span>
           </label>
         ))}
         {rooms.length === 0 && <p className="p-3 text-sm text-muted">No rooms exist yet.</p>}

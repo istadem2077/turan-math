@@ -9,13 +9,13 @@ import { GenerateForm } from "./GenerateForm";
 export default async function TestsPage() {
   const tests = await db.test.findMany({
     orderBy: { createdAt: "desc" },
-    include: { createdBy: { select: { fullName: true } }, _count: { select: { rooms: true } } },
+    include: { createdBy: { select: { fullName: true } }, _count: { select: { quizzes: true } } },
   });
   return (
     <>
       <PageHeader
         title="Tests"
-        subtitle="A test is a fixed 44-question form (2 modules × 22). Assign it to one or more rooms."
+        subtitle="A test is a fixed 44-question form (2 modules × 22). Use it in one or more quizzes."
         actions={<LinkButton href="/staff/tests/new" variant="secondary">Build manually</LinkButton>}
       />
       <div className="space-y-6">
@@ -62,7 +62,7 @@ export default async function TestsPage() {
                 <th>Title</th>
                 <th>Type</th>
                 <th>Created</th>
-                <th>Rooms</th>
+                <th>Quizzes</th>
               </tr>
             </thead>
             <tbody>
@@ -77,7 +77,7 @@ export default async function TestsPage() {
                   <td className="text-muted">
                     <LocalTime iso={t.createdAt.toISOString()} mode="date" /> · {t.createdBy?.fullName ?? "—"}
                   </td>
-                  <td>{t._count.rooms}</td>
+                  <td>{t._count.quizzes}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,13 +1,14 @@
 import "server-only";
 import { db } from "./db";
 import { currentDeadline } from "./attempts";
-import type { Attempt, Room } from "@/generated/prisma/client";
+import type { Attempt, Quiz } from "@/generated/prisma/client";
 import type { Choice } from "./taxonomy";
 
 export type ExamItem = { id: string; position: number; type: "MCQ" | "SPR"; stem: string; choices: Choice[] | null };
 export type ExamResponse = { answer: string | null; marked: boolean; eliminated: string[] };
 export type ExamState = {
   roomId: string;
+  quizId: string;
   module: 1 | 2;
   deadline: string;
   serverNow: string;
@@ -16,21 +17,22 @@ export type ExamState = {
 };
 
 /** Builds what the exam client needs for the current module. Never includes answer keys. */
-export async function buildExamState(room: Room, attempt: Attempt): Promise<ExamState | null> {
-  if (attempt.status === "SUBMITTED" || !room.testId) return null;
+export async function buildExamState(quiz: Quiz, attempt: Attempt): Promise<ExamState | null> {
+  if (attempt.status === "SUBMITTED" || !quiz.testId) return null;
   const module = attempt.status === "MODULE_1" ? 1 : 2;
   const [items, responses] = await Promise.all([
     db.testItem.findMany({
-      where: { testId: room.testId, module },
+      where: { testId: quiz.testId, module },
       orderBy: { position: "asc" },
       select: { id: true, position: true, question: { select: { type: true, stem: true, choices: true } } },
     }),
     db.response.findMany({ where: { attemptId: attempt.id, testItem: { module } } }),
   ]);
   return {
-    roomId: room.id,
+    roomId: quiz.roomId,
+    quizId: quiz.id,
     module,
-    deadline: currentDeadline(room, attempt)!.toISOString(),
+    deadline: currentDeadline(quiz, attempt)!.toISOString(),
     serverNow: new Date().toISOString(),
     items: items.map((i) => ({
       id: i.id,

@@ -15,7 +15,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       orderBy: [{ active: "desc" }, { fullName: "asc" }],
       include: { memberships: { include: { room: { select: { id: true, name: true } } } } },
     }),
-    db.room.findMany({ orderBy: { startsAt: "desc" }, select: { id: true, name: true } }),
+    db.room.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   return (
     <>

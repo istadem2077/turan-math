@@ -1,17 +1,9 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import { addRoomMembers, moveRoomMember } from "../../actions";
 
-export function AutoRefresh({ seconds }: { seconds: number }) {
-  const router = useRouter();
-  useEffect(() => {
-    const t = setInterval(() => router.refresh(), seconds * 1000);
-    return () => clearInterval(t);
-  }, [router, seconds]);
-  return null;
-}
+export { AutoRefresh } from "@/components/AutoRefresh";
 
 export function AddMembers({ roomId, students }: { roomId: string; students: { id: string; fullName: string; username: string }[] }) {
   const [q, setQ] = useState("");
