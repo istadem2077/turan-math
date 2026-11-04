@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isValidSprInput } from "../../src/lib/grading";
 import { fixDollarsInMath } from "../cbqb/convert";
+import { missingContext } from "../../src/lib/question-checks";
 
 export type OutRow = {
   externalId: string;
@@ -17,8 +18,10 @@ export type OutRow = {
   choices?: Record<string, string>;
   answer: string | string[];
   explanation?: string;
-  /** Scraped questions are imported inactive so staff review them first. */
-  active: boolean;
+  /** Set by writeOutput: true for solvable questions. */
+  active?: boolean;
+  /** Why the question can't be answered as stored; set by the scraper or by writeOutput's checks. */
+  unsolvable?: string;
 };
 
 export function arg(name: string): string | undefined {
@@ -133,6 +136,26 @@ export function brokenMath(md: string): boolean {
   return false;
 }
 
+/**
+ * Marks every row: solvable ones active, the rest inactive with an
+ * `unsolvable` reason (missing figure/table/definition, broken math, or a
+ * reason the scraper already set). The importer skips unsolvable rows unless
+ * asked to include them.
+ */
+export function markSolvability(rows: OutRow[]) {
+  for (const r of rows) {
+    const reasons = r.unsolvable ? [r.unsolvable] : [];
+    const known = reasons.join(" ");
+    const missing = missingContext(r.stem);
+    // Skip follow-on reasons the scraper's own reason already explains.
+    if (missing && !(/figure|table|graph/.test(known) && /figure|table|graph/.test(missing))) reasons.push(missing);
+    if ((brokenMath(r.stem) || Object.values(r.choices ?? {}).some(brokenMath)) && !/LaTeX table/.test(known)) reasons.push("broken math");
+    if (/!\[[^\]]*\]\(https?:/.test(r.stem)) reasons.push("image hosted on another website");
+    r.unsolvable = reasons.length ? reasons.join("; ") : undefined;
+    r.active = !r.unsolvable;
+  }
+}
+
 export function writeOutput(outDir: string, rows: OutRow[], report: Record<string, unknown>) {
   rows = [...rows];
   mkdirSync(outDir, { recursive: true });
@@ -141,17 +164,13 @@ export function writeOutput(outDir: string, rows: OutRow[], report: Record<strin
     if (r.explanation) r.explanation = fixDollarsInMath(r.explanation);
     if (r.choices) for (const k of Object.keys(r.choices)) r.choices[k] = fixDollarsInMath(r.choices[k]);
   }
-  // Last guard: never write a question whose math would display broken.
-  const broken = rows.filter((r) => brokenMath(r.stem) || Object.values(r.choices ?? {}).some(brokenMath));
-  if (broken.length) {
-    console.log(`  dropped ${broken.length} with broken math: ${broken.map((r) => r.externalId).join(", ")}`);
-    rows = rows.filter((r) => !broken.includes(r));
-  }
+  markSolvability(rows);
   rows.sort((a, b) => a.externalId.localeCompare(b.externalId));
   writeFileSync(join(outDir, "questions.json"), JSON.stringify(rows, null, 2));
   writeFileSync(join(outDir, "report.json"), JSON.stringify({ generatedAt: new Date().toISOString(), ...report }, null, 2));
   const by = (k: keyof OutRow) => rows.reduce<Record<string, number>>((acc, r) => ((acc[String(r[k])] = (acc[String(r[k])] ?? 0) + 1), acc), {});
-  console.log(`\nWrote ${rows.length} questions to ${join(outDir, "questions.json")}`);
+  const unsolvable = rows.filter((r) => r.unsolvable).length;
+  console.log(`\nWrote ${rows.length} questions to ${join(outDir, "questions.json")}: ${rows.length - unsolvable} solvable, ${unsolvable} marked unsolvable`);
   console.log(`  by domain: ${JSON.stringify(by("domain"))}`);
   console.log(`  by skill: ${JSON.stringify(by("skill"))}`);
   console.log(`  by difficulty: ${JSON.stringify(by("difficulty"))}`);

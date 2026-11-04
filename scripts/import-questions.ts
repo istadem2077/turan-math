@@ -1,6 +1,10 @@
 /**
  * CLI bulk import (same as Question bank → Import, for very large files):
- *   npx tsx scripts/import-questions.ts <file.json|csv> [--figures <dir>] [--update] [--with-status]
+ *   npx tsx scripts/import-questions.ts <file.json|csv> [--figures <dir>] [--include-unsolvable] [--update] [--with-status]
+ *
+ * Rows the scrapers marked "unsolvable" are skipped unless --include-unsolvable
+ * is given: then they come in inactive, with the reason as their review note
+ * (Question bank → Status: Flagged).
  *
  * Rows whose externalId already exists are skipped, unless:
  *   --update        replace their text, choices, answer key, skill and difficulty
@@ -35,10 +39,13 @@ async function main() {
   const r = await importRows(ok, {
     update: args.includes("--update"),
     withStatus: args.includes("--with-status"),
+    includeUnsolvable: args.includes("--include-unsolvable"),
     figureFile: figuresDir ? (name) => readFileSync(join(figuresDir, basename(name))) : undefined,
   });
   console.log(
-    `Valid: ${ok.length}, inserted: ${r.inserted}, updated: ${r.updated}, skipped (already there): ${r.skipped}, invalid: ${errors.length}, figures stored: ${r.figures}`,
+    `Valid: ${ok.length}, inserted: ${r.inserted}, updated: ${r.updated}, skipped (already there): ${r.skipped}, ` +
+      `unsolvable: ${ok.filter((x) => x.reviewNote).length} (${args.includes("--include-unsolvable") ? "imported inactive, Status: Flagged" : "skipped"}), ` +
+      `invalid: ${errors.length}, figures stored: ${r.figures}`,
   );
 }
 

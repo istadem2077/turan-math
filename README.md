@@ -241,6 +241,35 @@ The question bank has no public API contract; if it changes, `--probe` shows
 what it returns and `ENDPOINTS` / `normalizeItem()` in the script need updating.
 Check College Board's terms of use for how you may use the questions.
 
+### Rebuilding the question bank from scratch
+
+One command empties the bank, re-scrapes every source and imports the
+solvable questions as active (run it on your machine with the database
+container up; see "Importing from the College Board" above):
+
+```bash
+npm run questions:rebuild -- --yes                        # solvable questions only
+npm run questions:rebuild -- --yes --include-unsolvable   # also unsolvable ones, inactive + flagged
+```
+
+Options: `--offline` (use the scrapers' download caches; fast, no new
+questions), `--skip cbqb` (leave a source out, e.g. if College Board is
+unreachable). It scrapes first and only empties the bank if every scraper
+succeeded.
+
+* **Emptying** (`npm run questions:reset -- --yes` on its own) deletes every
+  question except those used in a test: deleting those would destroy the
+  results of everyone who took it, so they're kept and deactivated.
+* **Unsolvable** means the question can't be answered as stored: a missing
+  figure, graph, table or definition ("for the function f defined above"
+  with nothing above), a dependency on another exercise, or broken math.
+  The scrapers mark these with an `unsolvable` reason instead of dropping them.
+* **Flagged questions** (imported with `--include-unsolvable`, or the web
+  import's "Also import questions marked unsolvable") are inactive and show
+  their reason on the question page and in review mode: **Question bank →
+  Status: Flagged → Review these**, fix with **E** (editor), then **A** to
+  activate (this clears the flag) or **D** to delete.
+
 ### Other question sources
 
 | Script | Source | Questions | License |
@@ -255,11 +284,12 @@ npx tsx scripts/import-questions.ts data/openstax/questions.json
 npx tsx scripts/import-questions.ts data/agieval/questions.json
 ```
 
-Skills (and for OpenStax, difficulty) are assigned by rules, so both scripts
-mark every question **inactive**: review them under **Question bank → Status:
-Inactive** and press **Activate** on the ones you want in tests. Exercises with
-figures, several parts, non-numeric answers or missing context are skipped;
-`report.json` lists what was skipped and why.
+Solvable questions are written as active; unsolvable ones (needing a figure
+that isn't included, another exercise, etc.) are marked and only imported with
+`--include-unsolvable`. Exercises with several parts or non-numeric answers are
+skipped; `report.json` lists what was skipped and why. Skills (and for
+OpenStax, difficulty) are assigned by rules, so spot-check them with review
+mode.
 
 ### Reviewing many questions
 

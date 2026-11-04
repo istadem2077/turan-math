@@ -15,6 +15,16 @@ export function ImportForm() {
         className="block text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:font-semibold file:text-brand-dark"
       />
       <label className="flex cursor-pointer items-start gap-2 text-sm">
+        <input type="checkbox" name="includeUnsolvable" className="mt-0.5" />
+        <span>
+          <span className="font-medium">Also import questions marked unsolvable</span>
+          <span className="block text-xs text-muted">
+            Rows with an &quot;unsolvable&quot; reason (missing figure, table or definition…) come in inactive and flagged, so you can fix them under
+            Status: Flagged. Otherwise they&apos;re skipped.
+          </span>
+        </span>
+      </label>
+      <label className="flex cursor-pointer items-start gap-2 text-sm">
         <input type="checkbox" name="update" className="mt-0.5" />
         <span>
           <span className="font-medium">Update questions that already exist</span>
@@ -29,7 +39,8 @@ export function ImportForm() {
       {state && "total" in state && (
         <div className="space-y-3">
           <Notice tone={state.errorCount ? "warn" : "ok"}>
-            {state.total} rows read · {state.inserted} imported · {state.updated} updated · {state.skipped} already there (skipped) · {state.errorCount}{" "}
+            {state.total} rows read · {state.inserted} imported · {state.updated} updated · {state.skipped} already there (skipped) · {state.unsolvableSkipped ? `${state.unsolvableSkipped} unsolvable skipped · ` : ""}
+            {state.errorCount}{" "}
             invalid{state.figures ? ` · ${state.figures} figures stored` : ""}
           </Notice>
           {state.errors && state.errors.length > 0 && (

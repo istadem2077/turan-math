@@ -7,8 +7,8 @@
  *   npx tsx scripts/check-questions.ts --source cbqb   # only externalIds starting "cbqb:"
  *   npx tsx scripts/check-questions.ts --deactivate    # also set them inactive
  *
- * Inactive questions are never drawn into new tests; staff can fix and
- * re-activate them in Question bank → Status: Inactive.
+ * Deactivated questions get the reason as a review note: fix and activate them
+ * under Question bank → Status: Flagged.
  */
 import "dotenv/config";
 import { db } from "../src/lib/db";
@@ -33,8 +33,8 @@ async function main() {
   console.log(`\nChecked ${questions.length} active questions; ${bad.length} can't be answered as stored.`);
 
   if (bad.length && deactivate) {
-    const { count } = await db.question.updateMany({ where: { id: { in: bad.map((q) => q.id) } }, data: { active: false } });
-    console.log(`Set ${count} inactive.`);
+    for (const q of bad) await db.question.update({ where: { id: q.id }, data: { active: false, reviewNote: q.why } });
+    console.log(`Set ${bad.length} inactive and flagged (Question bank → Status: Flagged).`);
   } else if (bad.length) {
     console.log("Run again with --deactivate to take them out of rotation.");
   }

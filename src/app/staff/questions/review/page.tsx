@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
-import { Badge, Card, Empty, LinkButton, PageHeader } from "@/components/ui";
+import { Badge, Card, Empty, LinkButton, Notice, PageHeader } from "@/components/ui";
 import { QuestionPreview } from "@/components/QuestionPreview";
 import { DOMAIN_LABEL } from "@/lib/taxonomy";
 import { SOURCE_LABEL, cleanFilters, filterQuery, questionWhere } from "@/lib/question-filters";
@@ -60,7 +60,12 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
             </span>
           }
         >
-          <div key={q.id} className="anim-page">
+          <div key={q.id} className="anim-page space-y-4">
+            {q.reviewNote && (
+              <Notice tone="bad">
+                <b>Flagged as unsolvable:</b> {q.reviewNote}. Press <b>E</b> to fix it in the editor, or <b>D</b> to delete it.
+              </Notice>
+            )}
             <QuestionPreview q={q} />
           </div>
         </Card>

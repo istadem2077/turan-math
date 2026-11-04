@@ -10,16 +10,15 @@
  * attribution.
  *
  * Only exercises whose answer is a single number are kept (imported as
- * grid-in / SPR questions); exercises with figures, several parts or
- * non-numeric answers are skipped. Skills come from the book section, and
- * difficulty is a heuristic, so everything is written with active:false for
- * staff to review in Question bank → Status: Inactive.
+ * grid-in / SPR questions); exercises with several parts or non-numeric
+ * answers are skipped. Exercises that need a figure (not downloaded) or
+ * another exercise are kept but marked "unsolvable". Skills come from the book
+ * section and difficulty is a heuristic.
  *
  * Then:  npx tsx scripts/import-questions.ts data/openstax/questions.json
  */
 import { join } from "node:path";
 import { htmlToMarkdown } from "../cbqb/convert";
-import { missingContext } from "../../src/lib/question-checks";
 import { arg, fetchCached, flag, numericAnswer, pool, writeOutput, type OutRow } from "./common";
 
 type Book = { repo: string; slug: string; title: string; url: string; level: 0 | 1 | 2 };
@@ -219,9 +218,12 @@ async function main() {
       const solution = /<solution\b[^>]*>([\s\S]*?)<\/solution>/.exec(tok)?.[1];
       if (!id || !problem) { skip("malformed"); continue; }
       if (!solution) { skip("no answer in book"); continue; }
-      if (/<(figure|media|image)\b/.test(tok)) { skip("has figure"); continue; }
+      // Problems that make it unsolvable as stored: kept and marked, not skipped.
+      const problems: string[] = [];
+      if (/<(figure|media|image)\b/.test(tok)) problems.push("has a figure that isn't included");
       if (/ⓐ|ⓑ/.test(tok)) { skip("several parts"); continue; }
-      if (/previous exercise|exercise above|exercises? \d|if you missed this problem/i.test(tok)) { skip("depends on another exercise"); continue; }
+      if (/if you missed this problem/i.test(tok)) { skip("readiness check"); continue; }
+      if (/previous exercise|exercise above|exercises? \d/i.test(tok)) problems.push("depends on another exercise");
       if (!instruction && /^\s*<para[^>]*>\s*<m:math/.test(problem.trim())) { skip("no instruction"); continue; }
 
       const sectionSkill = classify(chapter, section, instruction + " " + problem);
@@ -238,9 +240,9 @@ async function main() {
       const words = body.replace(/\\text\{[^}]*\}|\\[a-zA-Z]+/g, "").replace(/\$[^$]*\$/g, (m) => m.replace(/\\[a-zA-Z]+/g, ""));
       if (!/[a-zA-Z]/.test(words) && !/\bsolve\b/i.test(task)) { skip("bare arithmetic"); continue; }
       if (/indicated operation|convert the|multiplicative inverse|additive inverse|opposite of|place value/i.test(task)) { skip("bare arithmetic"); continue; }
-      if (missingContext(task + "\n\n" + body)) { skip("refers to missing content"); continue; }
+
       // No numbers at all: the data lives in another exercise or a figure.
-      if (!/\d/.test(task + body)) { skip("not self-contained"); continue; }
+      if (!/\d/.test(task + body)) problems.push("its data is in another exercise or a figure");
       // Converter artifact: a currency "$" glued to math ("$$577.08$").
       if (/(^|[^\n])\$\$(?!\n)/.test(body)) { skip("formatting"); continue; }
 
@@ -258,7 +260,7 @@ async function main() {
           `Answer: ${answer}\n\n` +
           `*Source: OpenStax, ${book.title}, “${chapter}: ${section}”. © Rice University, licensed under ` +
           `[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). ${book.url}*`,
-        active: false,
+        ...(problems.length && { unsolvable: problems.join("; ") }),
       });
       report.kept++;
     }

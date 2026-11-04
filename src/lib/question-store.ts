@@ -59,6 +59,8 @@ const comparable = (v: unknown) =>
   JSON.stringify(v ?? null).replace(/\]\((?:figure:[^)\s]+|\/api\/assets\/[^)\s]+|data:image\/[^)\s]+)\)/g, "](F)");
 
 export type ImportOptions = {
+  /** Also import rows flagged unsolvable (inactive, with their review note). Default: skip them. */
+  includeUnsolvable?: boolean;
   /** Replace questions whose externalId already exists (when their content changed). */
   update?: boolean;
   /** With update: also apply the row's active/inactive status (exports carry it). */
@@ -67,7 +69,9 @@ export type ImportOptions = {
   figureFile?: (name: string) => Buffer;
 };
 
-export async function importRows(ok: Row[], opts: ImportOptions = {}) {
+export async function importRows(all: Row[], opts: ImportOptions = {}) {
+  const ok = opts.includeUnsolvable ? all : all.filter((r) => !r.reviewNote);
+  const unsolvableSkipped = all.length - ok.length;
   const ids = ok.map((r) => r.externalId).filter((x): x is string => !!x);
   const current = new Map((await db.question.findMany({ where: { externalId: { in: ids } } })).map((q) => [q.externalId!, q]));
   const fresh = ok.filter((r) => !r.externalId || !current.has(r.externalId));
@@ -87,7 +91,7 @@ export async function importRows(ok: Row[], opts: ImportOptions = {}) {
           r.skillId !== q.skillId ||
           r.difficulty !== q.difficulty ||
           r.type !== q.type ||
-          (opts.withStatus && r.active !== q.active)
+          (opts.withStatus && (r.active !== q.active || (r.reviewNote ?? null) !== q.reviewNote))
         );
       });
 
@@ -108,11 +112,11 @@ export async function importRows(ok: Row[], opts: ImportOptions = {}) {
         choices: "choices" in r && r.choices ? r.choices : Prisma.DbNull,
         correctChoice: "correctChoice" in r ? r.correctChoice : null,
         sprAnswers: r.sprAnswers,
-        ...(opts.withStatus && { active: r.active }),
+        ...(opts.withStatus && { active: r.active, reviewNote: r.reviewNote ?? null }),
       },
     });
   }
-  return { inserted, updated: changed.length, skipped: ok.length - inserted - changed.length, figures };
+  return { inserted, updated: changed.length, skipped: ok.length - inserted - changed.length, unsolvableSkipped, figures };
 }
 
 // ───────────────────────── Export ─────────────────────────
@@ -151,6 +155,7 @@ export async function exportQuestions(where: Prisma.QuestionWhereInput) {
       answer: q.type === "MCQ" ? q.correctChoice! : q.sprAnswers,
       ...(q.explanation && { explanation: inline(q.explanation) }),
       active: q.active,
+      ...(q.reviewNote && { unsolvable: q.reviewNote }),
     };
   });
 }

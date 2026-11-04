@@ -146,6 +146,7 @@ export default async function QuestionsPage({
           <Select name="status" defaultValue={sp.status ?? ""}>
             <option value="">Active</option>
             <option value="inactive">Inactive (retired or to review)</option>
+            <option value="flagged">Flagged unsolvable (needs fixing)</option>
             <option value="all">All</option>
           </Select>
           <div className="flex gap-2">

@@ -28,6 +28,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
             <Badge tone="brand">{DOMAIN_LABEL[q.domain]}</Badge>
             <Badge>{DIFFICULTY_LABEL[q.difficulty]}</Badge>
             {!q.active && <Badge tone="warn">Inactive</Badge>}
+            {q.reviewNote && <Badge tone="bad">Flagged</Badge>}
           </span>
         }
         subtitle={`${q.skill.name}${q.externalId ? ` · ${q.externalId}` : ""} · used in ${q._count.testItems} test(s)`}
@@ -42,6 +43,14 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
           ))
         }
       />
+      {q.reviewNote && (
+        <div className="mb-6">
+          <Notice tone="bad">
+            <b>Flagged as unsolvable on import:</b> {q.reviewNote}. Fix the question below (e.g. add the missing figure or definition), save, then
+            activate it. Activating clears this flag.
+          </Notice>
+        </div>
+      )}
     </>
   );
 

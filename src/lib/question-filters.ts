@@ -25,7 +25,13 @@ export const SOURCE_LABEL: Record<string, string> = {
 export function questionWhere(f: QuestionFilters): Prisma.QuestionWhereInput {
   const src = f.source;
   return {
-    ...(f.status === "inactive" ? { active: false } : f.status === "all" ? {} : { active: true }),
+    ...(f.status === "inactive"
+      ? { active: false }
+      : f.status === "flagged"
+        ? { reviewNote: { not: null } }
+        : f.status === "all"
+          ? {}
+          : { active: true }),
     ...(f.domain && { domain: f.domain as never }),
     ...(f.skillId && { skillId: Number(f.skillId) }),
     ...(f.difficulty && { difficulty: f.difficulty as never }),

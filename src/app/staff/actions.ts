@@ -280,7 +280,8 @@ export async function saveQuestion(id: string | null, _: ActionResult | undefine
 
 export async function setQuestionActive(id: string, active: boolean) {
   await requireAdmin();
-  await db.question.update({ where: { id }, data: { active } });
+  // Activating means a person checked it: the import's "unsolvable" flag no longer applies.
+  await db.question.update({ where: { id }, data: { active, ...(active && { reviewNote: null }) } });
   revalidatePath(`/staff/questions/${id}`);
   revalidatePath("/staff/questions");
 }
@@ -294,7 +295,7 @@ export async function importQuestions(_: unknown, form: FormData) {
     const skills = await db.skill.findMany();
     const { ok, errors } = toQuestionData(rows, skills);
     const update = form.get("update") === "on";
-    const r = await importRows(ok, { update, withStatus: update });
+    const r = await importRows(ok, { update, withStatus: update, includeUnsolvable: form.get("includeUnsolvable") === "on" });
     revalidatePath("/staff/questions");
     return { total: rows.length, valid: ok.length, ...r, errors: errors.slice(0, 200), errorCount: errors.length };
   } catch (e) {
@@ -328,7 +329,7 @@ export async function bulkQuestions(target: BulkTarget, op: "activate" | "deacti
     const { count } = await db.question.deleteMany({ where: { AND: [where, { testItems: { none: {} } }] } });
     message = `Deleted ${count} question${count === 1 ? "" : "s"}.` + (total > count ? ` ${total - count} used in tests ${total - count === 1 ? "was" : "were"} kept (deactivate them instead).` : "");
   } else {
-    const { count } = await db.question.updateMany({ where, data: { active: op === "activate" } });
+    const { count } = await db.question.updateMany({ where, data: op === "activate" ? { active: true, reviewNote: null } : { active: false } });
     message = `${op === "activate" ? "Activated" : "Deactivated"} ${count} question${count === 1 ? "" : "s"}.`;
   }
   revalidatePath("/staff/questions");
@@ -351,7 +352,7 @@ export async function reviewQuestion(
   const skill = await db.skill.findUniqueOrThrow({ where: { id: edits.skillId } });
   await db.question.update({
     where: { id },
-    data: { skillId: skill.id, domain: skill.domain, difficulty: edits.difficulty, ...(decision === "activate" && { active: true }) },
+    data: { skillId: skill.id, domain: skill.domain, difficulty: edits.difficulty, ...(decision === "activate" && { active: true, reviewNote: null }) },
   });
   return { ok: true };
 }

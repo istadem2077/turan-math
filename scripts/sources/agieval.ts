@@ -10,14 +10,13 @@
  * scripts/cbqb): fine for your own students' practice; don't republish them.
  *
  * The data has no skill or difficulty labels, so skills are guessed from
- * keywords and difficulty is MEDIUM; questions that rely on a figure or table
- * that isn't in the data are skipped. Everything is written with active:false
- * for staff to review in Question bank → Status: Inactive.
+ * keywords and difficulty is MEDIUM. Questions that rely on a figure or table
+ * that isn't in the data are kept but marked "unsolvable" (see
+ * markSolvability in ./common.ts).
  *
  * Then:  npx tsx scripts/import-questions.ts data/agieval/questions.json
  */
 import { join } from "node:path";
-import { missingContext } from "../../src/lib/question-checks";
 import { arg, brokenMath, fetchCached, flag, writeOutput, type OutRow } from "./common";
 
 const URL = "https://raw.githubusercontent.com/ruixiangcui/AGIEval/main/data/v1_1/sat-math.jsonl";
@@ -79,14 +78,13 @@ async function main() {
 
   items.forEach((it, i) => {
     const stem = [it.passage, it.question].filter(Boolean).join("\n\n").trim();
-    if (NEEDS_FIGURE.test(stem)) return void skipped.push({ index: i, reason: "needs a figure or table that isn't in the data" });
-    const missing = missingContext(stem);
-    if (missing) return void skipped.push({ index: i, reason: missing });
-    if (/\\begin\{(tabular|itemize|enumerate|center)\}/.test(stem + it.options.join(" ")))
-      return void skipped.push({ index: i, reason: "uses LaTeX layout (tabular/itemize) the app can't display" });
+    // Unsolvable as stored: kept, marked (the importer skips them unless asked).
+    const problems: string[] = [];
+    if (NEEDS_FIGURE.test(stem)) problems.push("needs a figure or table that isn't in the data");
+    if (/\\begin\{(tabular|itemize|enumerate|center)\}/.test(stem + it.options.join(" "))) problems.push("uses a LaTeX table/list the app can't display");
     if (it.options?.length !== 4 || !/^[A-D]$/.test(it.label)) return void skipped.push({ index: i, reason: "not a 4-choice question" });
     const choices = it.options.map(clean);
-    if (brokenMath(money(stem)) || choices.some(brokenMath)) return void skipped.push({ index: i, reason: "broken LaTeX in the question or choices" });
+
     // Some worked solutions have broken LaTeX in the source data; keep the question, drop the solution.
     const solution = money(it.other?.solution ?? "").trim();
     const text = stem + " " + it.options.join(" ");
@@ -104,12 +102,12 @@ async function main() {
       explanation:
         (solution && !brokenMath(solution) ? `${solution}\n\n` : "") +
         `*Source: official SAT practice test (College Board), via the AGIEval benchmark (Microsoft, arXiv:2304.06364).*`,
-      active: false,
+      ...(problems.length && { unsolvable: problems.join("; ") }),
     });
   });
 
   writeOutput(OUT, rows, { total: items.length, kept: rows.length, skipped });
-  console.log(`  skipped ${skipped.length} (reasons in report.json; mostly figures missing from the data)`);
+  if (skipped.length) console.log(`  skipped ${skipped.length} (not 4-choice questions)`);
 }
 
 main().catch((e) => {
