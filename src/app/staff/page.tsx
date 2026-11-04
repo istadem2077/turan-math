@@ -45,7 +45,7 @@ export default async function StaffHome() {
       <PageHeader title="Overview" actions={<LinkButton href="/staff/rooms">Go to rooms</LinkButton>} />
       <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((s) => (
-          <Link key={s.label} href={s.href} className="rounded-xl border border-line bg-white p-5 transition hover:border-brand">
+          <Link key={s.label} href={s.href} className="rounded-xl border border-line bg-white p-5 transition duration-150 hover:-translate-y-0.5 hover:border-brand hover:shadow-md hover:shadow-brand/5">
             <div className="text-3xl font-bold">{s.value.toLocaleString()}</div>
             <div className="mt-1 text-sm text-muted">{s.label}</div>
           </Link>

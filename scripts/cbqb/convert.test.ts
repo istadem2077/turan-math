@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToMarkdown } from "./convert";
+import { fixDollarsInMath, htmlToMarkdown } from "./convert";
 
 /** mathml-to-latex puts spaces between tokens; they don't affect rendering. */
 const tight = (md: string) => md.replace(/\$[^$]*\$/g, (m) => m.replace(/ /g, ""));
@@ -27,6 +27,24 @@ describe("htmlToMarkdown", () => {
   it("renders display math as $$ on its own lines", () => {
     const { markdown } = htmlToMarkdown(`<p>Solve:</p>${M("<mi>y</mi><mo>=</mo><mn>2</mn>", true)}<p>Done.</p>`, "t");
     expect(markdown.replace(/ /g, "")).toBe("Solve:\n\n$$y=2$$\n\nDone.");
+  });
+
+  it("keeps an equation wrapped in aria-hidden (e.g. the function definition)", () => {
+    const { markdown } = htmlToMarkdown(
+      `<div aria-hidden="true">${M("<mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mn>4</mn><mi>x</mi>", true)}</div><p>For the function f defined above, what is ${M("<mi>f</mi><mo>(</mo><mn>1</mn><mo>)</mo>")}?</p>`,
+      "t",
+    );
+    expect(markdown.replace(/ /g, "")).toMatch(/^\$\$f\\left\(x\\right\)=4x\$\$\n\nForthefunctionfdefinedabove/);
+  });
+
+  it("treats display=block math inside a sentence as inline", () => {
+    const { markdown } = htmlToMarkdown(`<p>What is the value of ${M("<mi>f</mi><mo>(</mo><mn>1</mn><mo>)</mo>", true)}?</p>`, "t");
+    expect(tight(markdown)).toBe("What is the value of $f\\left(1\\right)$?");
+  });
+
+  it("keeps consecutive display equations on their own lines", () => {
+    const { markdown } = htmlToMarkdown(`<div>${M("<mi>y</mi><mo>=</mo><mn>2</mn>", true)}${M("<mi>x</mi><mo>=</mo><mn>3</mn>", true)}</div>`, "t");
+    expect(markdown.replace(/ /g, "")).toBe("$$y=2$$\n\n$$x=3$$");
   });
 
   it("escapes currency dollars outside math", () => {
@@ -79,5 +97,14 @@ describe("htmlToMarkdown", () => {
 
   it("returns empty for empty input", () => {
     expect(htmlToMarkdown("", "t")).toEqual({ markdown: "", figures: [] });
+  });
+});
+
+describe("fixDollarsInMath", () => {
+  it("rewrites escaped dollars inside math spans only", () => {
+    expect(fixDollarsInMath("Elise invests $\\$ 4500$ today.")).toBe("Elise invests $\\text{\\textdollar} 4500$ today.");
+    expect(fixDollarsInMath("It costs \\$12 and $x=2$.")).toBe("It costs \\$12 and $x=2$.");
+    expect(fixDollarsInMath("$$y = \\$3x$$")).toBe("$$y = \\text{\\textdollar}3x$$");
+    expect(fixDollarsInMath("unclosed $x")).toBe("unclosed $x");
   });
 });

@@ -75,7 +75,8 @@ describe("fillModule", () => {
   });
 
   it("errors when a domain runs dry", async () => {
-    const qs = fullBank(1).filter((q) => q.domain !== "GEOMETRY_TRIGONOMETRY");
+    // Enough of every other domain (18 each), so only geometry can run dry.
+    const qs = fullBank(3).filter((q) => q.domain !== "GEOMETRY_TRIGONOMETRY");
     await expect(fillModule(planModule(BLUEPRINT[0]), bank(qs), new Set())).rejects.toThrow(/GEOMETRY_TRIGONOMETRY/);
   });
 });

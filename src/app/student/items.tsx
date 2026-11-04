@@ -87,7 +87,7 @@ export function HomeworkRow({ hw }: { hw: StudentHomework }) {
   return (
     <Link
       href={`/student/rooms/${hw.roomId}/homework/${hw.id}`}
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white p-4 transition hover:border-brand"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white p-4 transition duration-150 hover:-translate-y-0.5 hover:border-brand hover:shadow-md hover:shadow-brand/5"
     >
       <div>
         <div className="font-semibold">{hw.title}</div>

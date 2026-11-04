@@ -1,11 +1,15 @@
 "use client";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Notice } from "@/components/ui";
 import { FileInput } from "@/components/FileInput";
 import { submitHomework, type SubmitResult } from "@/app/student/actions";
 
 export function SubmitForm({ homeworkId, formats, resubmit }: { homeworkId: string; formats: string[]; resubmit: boolean }) {
-  const [state, formAction, pending] = useActionState<SubmitResult | undefined, FormData>(submitHomework.bind(null, homeworkId), undefined);
+  const [state, onSubmit, pending] = useActionForm<SubmitResult>(
+    submitHomework.bind(null, homeworkId),
+    () => !resubmit || window.confirm("Replace your previous hand-in with these files?"),
+  );
   const [version, setVersion] = useState(0);
   useEffect(() => {
     if (state?.ok) setVersion((v) => v + 1);
@@ -13,12 +17,9 @@ export function SubmitForm({ homeworkId, formats, resubmit }: { homeworkId: stri
   return (
     <div className="space-y-4">
       <form
-        action={formAction}
         className="space-y-4"
         key={version}
-        onSubmit={(e) => {
-          if (resubmit && !window.confirm("Replace your previous hand-in with these files?")) e.preventDefault();
-        }}
+        onSubmit={onSubmit}
       >
         <Field label="Files">
           <FileInput name="files" formats={formats} required />
@@ -31,7 +32,7 @@ export function SubmitForm({ homeworkId, formats, resubmit }: { homeworkId: stri
             className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
         </Field>
-        <Button disabled={pending}>{pending ? "Uploading…" : resubmit ? "Replace hand-in" : "Hand in"}</Button>
+        <Button pending={pending}>{resubmit ? "Replace hand-in" : "Hand in"}</Button>
       </form>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
       {state?.message && <Notice tone="ok">{state.message}</Notice>}

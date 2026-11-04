@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Input, Notice, Select, Textarea } from "@/components/ui";
 import { MathText } from "@/components/MathText";
 import { DIFFICULTIES, DIFFICULTY_LABEL, DOMAINS, DOMAIN_LABEL, MCQ_KEYS } from "@/lib/taxonomy";
@@ -27,7 +28,7 @@ export function QuestionEditor({
   skills: { id: number; name: string; domain: Domain }[];
   initial: QuestionValues;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   const [v, setV] = useState(initial);
   const [uploadMsg, setUploadMsg] = useState<string>();
   const stemRef = useRef<HTMLTextAreaElement>(null);
@@ -47,7 +48,7 @@ export function QuestionEditor({
   }
 
   return (
-    <form action={formAction} className="grid gap-6 lg:grid-cols-2">
+    <form onSubmit={onSubmit} className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Skill" className="sm:col-span-2">
@@ -115,7 +116,7 @@ export function QuestionEditor({
           <Input name="externalId" value={v.externalId} onChange={(e) => up("externalId", e.target.value)} />
         </Field>
         {state?.error && <Notice tone="bad">{state.error}</Notice>}
-        <Button disabled={pending}>{pending ? "Saving…" : "Save question"}</Button>
+        <Button pending={pending}>{"Save question"}</Button>
       </div>
       <div className="lg:sticky lg:top-6 lg:self-start">
         <div className="text-sm font-medium">Preview</div>

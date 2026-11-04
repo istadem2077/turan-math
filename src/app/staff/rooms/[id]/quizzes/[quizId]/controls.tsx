@@ -1,5 +1,5 @@
 "use client";
-import { useActionState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button } from "@/components/ui";
 import { DateTimeInput } from "@/components/LocalTime";
 import type { ActionResult } from "@/app/staff/actions";
@@ -13,18 +13,18 @@ export function ScheduleForm({
   label: string;
   defaultIso?: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   return (
-    <form action={formAction} className="space-y-2">
+    <form onSubmit={onSubmit} className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <div className="w-60">
           <DateTimeInput name="startsAt" defaultIso={defaultIso} required />
         </div>
-        <Button variant="secondary" disabled={pending}>
-          {pending ? "Saving…" : label}
+        <Button variant="secondary" pending={pending}>
+          {label}
         </Button>
       </div>
-      {state?.error && <p className="text-xs text-bad">{state.error}</p>}
+      {state?.error && <p className="anim-fade text-xs text-bad">{state.error}</p>}
     </form>
   );
 }

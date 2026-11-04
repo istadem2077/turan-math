@@ -1,96 +1,66 @@
 /**
- * CLI bulk import for very large question dumps:
- *   npx tsx scripts/import-questions.ts path/to/questions.json|csv [--figures <dir>]
- * Rows whose externalId already exists are skipped.
+ * CLI bulk import (same as Question bank → Import, for very large files):
+ *   npm run questions:import -- <file.json|csv> [--figures <dir>] [--include-unsolvable] [--update] [--with-status]
+ * (the npm script first applies pending database migrations; running this file
+ * directly with tsx skips that step)
  *
- * --figures <dir>: question text may reference figures as ![alt](figure:<file>)
- * (scripts/cbqb/scrape.ts writes them this way). Each referenced file is read
- * from <dir>, stored as an Asset, and the reference rewritten to
- * /api/assets/<id>. Only rows that will actually be inserted get assets.
+ * Rows the scrapers marked "unsolvable" are skipped unless --include-unsolvable
+ * is given: then they come in inactive, with the reason as their review note
+ * (Question bank → Status: Flagged).
+ *
+ * Rows whose externalId already exists are skipped, unless:
+ *   --update        replace their text, choices, answer key, skill and difficulty
+ *                   when they changed (e.g. after a scraper fix). Past attempts
+ *                   keep their scores; review pages show the new text.
+ *   --with-status   with --update, also apply each row's active/inactive value
+ *                   (use it for files from Question bank → Export).
+ *
+ * Figures: ![alt](figure:<file>) is read from --figures <dir> (scrapers write
+ * these); ![alt](data:image/…;base64,…) is embedded (exports write these).
+ * Both become Assets. See src/lib/question-store.ts.
  */
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { basename, join } from "node:path";
 import { db } from "../src/lib/db";
 import { parseImportFile, toQuestionData } from "../src/lib/question-import";
-
-const MIME: Record<string, string> = {
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-};
-const FIGURE_REF = /\]\(figure:([^)\s]+)\)/g;
-
-type Row = ReturnType<typeof toQuestionData>["ok"][number];
-
-async function attachFigures(rows: Row[], dir: string) {
-  const assetIds = new Map<string, string>();
-  const resolve = async (text: string | null | undefined) => {
-    if (!text) return text;
-    const names = [...text.matchAll(FIGURE_REF)].map((m) => m[1]);
-    for (const name of names) {
-      if (assetIds.has(name)) continue;
-      const mimeType = MIME[extname(name).toLowerCase()];
-      if (!mimeType) throw new Error(`Unsupported figure type: ${name}`);
-      const asset = await db.asset.create({
-        data: { mimeType, filename: name, data: readFileSync(join(dir, basename(name))) },
-        select: { id: true },
-      });
-      assetIds.set(name, asset.id);
-    }
-    return text.replace(FIGURE_REF, (_, name: string) => `](/api/assets/${assetIds.get(name)})`);
-  };
-  for (const row of rows) {
-    row.stem = (await resolve(row.stem))!;
-    row.explanation = (await resolve(row.explanation)) ?? undefined;
-    if ("choices" in row && row.choices) for (const c of row.choices) c.text = (await resolve(c.text))!;
-  }
-  return assetIds.size;
-}
+import { importRows } from "../src/lib/question-store";
 
 async function main() {
   const args = process.argv.slice(2);
   const fi = args.indexOf("--figures");
   const figuresDir = fi >= 0 ? args[fi + 1] : undefined;
   const file = args.find((a, i) => !a.startsWith("--") && (fi < 0 || i !== fi + 1));
-  if (!file) throw new Error("Usage: tsx scripts/import-questions.ts <file.json|file.csv> [--figures <dir>]");
+  if (!file) throw new Error("Usage: tsx scripts/import-questions.ts <file.json|file.csv> [--figures <dir>] [--update] [--with-status]");
 
   const rows = parseImportFile(basename(file), readFileSync(file, "utf8"));
-  const skills = await db.skill.findMany();
-  const { ok, errors } = toQuestionData(rows, skills);
+  const { ok, errors } = toQuestionData(rows, await db.skill.findMany());
   for (const e of errors.slice(0, 50)) console.error(`Row ${e.row}: ${e.message}`);
   if (errors.length > 50) console.error(`...and ${errors.length - 50} more errors`);
 
-  // Drop rows that are already imported, so re-runs don't create orphan assets.
-  const ids = ok.map((r) => r.externalId).filter((x): x is string => !!x);
-  const existing = new Set(
-    (await db.question.findMany({ where: { externalId: { in: ids } }, select: { externalId: true } })).map(
-      (q: { externalId: string | null }) => q.externalId,
-    ),
-  );
-  const fresh = ok.filter((r) => !r.externalId || !existing.has(r.externalId));
-
-  const usesFigures = fresh.some((r) => JSON.stringify(r).includes("](figure:"));
-  if (usesFigures && !figuresDir) throw new Error("Rows reference figure:… files; pass --figures <dir>");
-  const assets = figuresDir ? await attachFigures(fresh, figuresDir) : 0;
-
-  let inserted = 0;
-  for (let i = 0; i < fresh.length; i += 1000) {
-    const res = await db.question.createMany({ data: fresh.slice(i, i + 1000), skipDuplicates: true });
-    inserted += res.count;
-  }
+  const r = await importRows(ok, {
+    update: args.includes("--update"),
+    withStatus: args.includes("--with-status"),
+    includeUnsolvable: args.includes("--include-unsolvable"),
+    figureFile: figuresDir ? (name) => readFileSync(join(figuresDir, basename(name))) : undefined,
+  });
   console.log(
-    `Valid: ${ok.length}, inserted: ${inserted}, skipped (duplicate externalId): ${ok.length - inserted}, invalid: ${errors.length}, figures stored: ${assets}`,
+    `Valid: ${ok.length}, inserted: ${r.inserted}, updated: ${r.updated}, skipped (already there): ${r.skipped}, ` +
+      `unsolvable: ${ok.filter((x) => x.reviewNote).length} (${args.includes("--include-unsolvable") ? "imported inactive, Status: Flagged" : "skipped"}), ` +
+      `invalid: ${errors.length}, figures stored: ${r.figures}`,
   );
 }
 
 main()
   .then(() => db.$disconnect())
   .catch(async (e) => {
-    console.error(e);
+    // P2022 / unknown field: the database (or the local Prisma client) is older than this code.
+    const code = (e as { code?: string }).code;
+    if (code === "P2022" || code === "P2021" || /Unknown argument|does not exist in the current database/.test(String(e)))
+      console.error(
+        "The database is missing recent updates. Run `npm run db:prepare` (or use `npm run questions:import`, which does it for you), then import again.",
+      );
+    else console.error(e);
     await db.$disconnect();
     process.exit(1);
   });

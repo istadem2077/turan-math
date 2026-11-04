@@ -47,7 +47,7 @@ docker compose down -v                # stop and DELETE all data
 Bulk-import a large question file into the running stack (uses your local Node.js against the published DB port):
 
 ```bash
-DATABASE_URL=postgresql://turan:turan@localhost:5432/turan_math npx tsx scripts/import-questions.ts questions.json
+DATABASE_URL=postgresql://turan:turan@localhost:5432/turan_math npm run questions:import -- questions.json
 ```
 
 ## Local development
@@ -66,18 +66,49 @@ The dev server also creates the skill taxonomy and admin account on start
 
 | Script | Purpose |
 |---|---|
-| `npm test` | Unit tests (blueprint selection, grading) |
+| `npm test` | Unit tests (blueprint selection, grading, question import conversion) |
+| `npm run test:e2e` | End-to-end browser tests (Playwright); run `npm run build` first. See below |
 | `npm run lint` | Type-check |
 | `npm run db:migrate:dev -- --name <change>` | Create a new migration after editing `prisma/schema.prisma` |
-| `npx tsx scripts/import-questions.ts file.json` | Bulk-import a very large question file from the CLI |
+| `npm run questions:import -- file.json` | Bulk-import a very large question file from the CLI |
+
+## End-to-end tests
+
+`e2e/` holds Playwright tests that drive the real app in Chromium: sign-in and
+access rules, the full quiz flow (create → start → lobby → take both modules →
+release results → student sees results, plus scheduling/cancelling), and
+homework (assign with an attachment, wrong-format rejection, hand-in, grading
+with a response file, reopening, due-date closing, file privacy).
+
+They run against a production build on port 3200 and their **own database**,
+`turan_math_e2e` by default. Setup creates it if needed, applies migrations and
+seeds it, but never deletes anything. The database name must contain "e2e" or
+"test", which keeps the tests away from real data.
+
+```bash
+docker compose up -d db              # or any PostgreSQL; the default URL matches docker-compose
+npm run build
+npx playwright install chromium      # first time only
+npm run test:e2e
+npx playwright show-report           # HTML report: traces, screenshots, videos of failures
+```
+
+To use a different server, set `E2E_DATABASE_URL`, e.g.
+`postgresql://user:pass@localhost:5432/turan_math_e2e`.
+
+**GitHub Actions** (`.github/workflows/ci.yml`) runs on every push: type-check
+and unit tests, then the end-to-end suite against a fresh PostgreSQL. When a
+run fails, download the `playwright-report` artifact from the run page and open
+`playwright-report/index.html`; failed tests include a trace you can step
+through.
 
 ## Roles
 
 | Role | Can |
 |---|---|
 | **Admin** | Everything a professor can, plus: manage professors, create/edit/retire/import questions |
-| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, create/start/schedule quizzes and monitor them live, release results, assign and grade homework |
-| **Student** | See only the rooms they are assigned to and the quizzes and homework in them; take quizzes; hand in homework; see quiz results once released and homework grades/responses once given |
+| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, create/start/schedule quizzes and monitor them live, release results, assign and grade homework, post lecture materials |
+| **Student** | See only the rooms they are assigned to and the quizzes, homework and lecture materials in them; take quizzes; hand in homework; see quiz results once released and homework grades/responses once given |
 
 Students never see other students, other rooms, other students' submissions, or
 answer keys. Every page, server action and file download re-checks the session
@@ -86,7 +117,12 @@ role and room membership on the server.
 ## Rooms, quizzes and homework
 
 A **room** is a classroom (a group of students); its page has tabs for
-Students, Quizzes, Homework and Settings.
+Students, Quizzes, Homework, Materials and Settings.
+
+**Materials** are lecture slides and documents (PDF, PowerPoint, Word, also
+OpenDocument; up to 40 MB per file), a link (Google Slides, a video, a shared
+folder), or both, with an optional description. Students in the room see them
+on their room page; PDFs open in the browser, other files download.
 
 **Quizzes** have no fixed time. A new quiz waits until the professor presses
 **Start quiz**: students in the room see it immediately and get **5 minutes**
@@ -150,8 +186,9 @@ User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem 
                          │        │
                          │        └──< Attempt ──< Response >── TestItem
                          │
+                         ├──< Material (files and/or a link)
                          └──< Homework ──< HomeworkSubmission
-                                 └──── StoredFile ────┘
+                                 └──── StoredFile ────┘  (also holds material files)
 ```
 
 | Table | Notes |
@@ -169,7 +206,8 @@ User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem 
 | `Response` | One per (attempt, item): `answer`, `markedForReview`, `eliminated[]`, `isCorrect` (set at grading) |
 | `Homework` | Per room: `title`, `instructions`, `dueAt`, `allowedFormats[]` (extensions; empty = any), `maxPoints`, `allowLate` |
 | `HomeworkSubmission` | One per (homework, student): `note`, `submittedAt`, `late`, `score`, `feedback`, `gradedAt`, `reopened` |
-| `StoredFile` | Uploaded homework files (bytea): assignment attachments, student files, or files in the professor's response |
+| `Material` | Per room: `title`, `description`, optional `url`, and files |
+| `StoredFile` | Uploaded files (bytea): homework attachments, student hand-ins, files in the professor's response, lecture materials |
 
 ## Question bank
 
@@ -196,12 +234,111 @@ machine; the output goes to `data/` (git-ignored, College Board content):
 ```bash
 npm run cbqb:scrape -- --limit 20      # test run; add --probe to inspect the raw API
 npm run cbqb:scrape                    # everything (cached in data/cbqb/raw, re-runs resume)
-npx tsx scripts/import-questions.ts data/cbqb/questions.json --figures data/cbqb/figures
+npm run questions:import -- data/cbqb/questions.json --figures data/cbqb/figures
 ```
 
 The question bank has no public API contract; if it changes, `--probe` shows
 what it returns and `ENDPOINTS` / `normalizeItem()` in the script need updating.
 Check College Board's terms of use for how you may use the questions.
+
+### Rebuilding the question bank from scratch
+
+One command empties the bank, re-scrapes every source and imports the
+solvable questions as active (run it on your machine with the database
+container up; see "Importing from the College Board" above):
+
+```bash
+npm run questions:rebuild -- --yes                        # solvable questions only
+npm run questions:rebuild -- --yes --include-unsolvable   # also unsolvable ones, inactive + flagged
+```
+
+The `npm run questions:*` commands first apply any pending database updates
+(the same step the app runs when its container starts), so they work right
+after a `git pull` even before the app is rebuilt.
+
+Options: `--offline` (use the scrapers' download caches; fast, no new
+questions), `--skip cbqb` (leave a source out, e.g. if College Board is
+unreachable). It scrapes first and only empties the bank if every scraper
+succeeded.
+
+* **Emptying** (`npm run questions:reset -- --yes` on its own) deletes every
+  question except those used in a test: deleting those would destroy the
+  results of everyone who took it, so they're kept and deactivated.
+* **Unsolvable** means the question can't be answered as stored: a missing
+  figure, graph, table or definition ("for the function f defined above"
+  with nothing above), a dependency on another exercise, or broken math.
+  The scrapers mark these with an `unsolvable` reason instead of dropping them.
+* **Flagged questions** (imported with `--include-unsolvable`, or the web
+  import's "Also import questions marked unsolvable") are inactive and show
+  their reason on the question page and in review mode: **Question bank →
+  Status: Flagged → Review these**, fix with **E** (editor), then **A** to
+  activate (this clears the flag) or **D** to delete.
+
+### Other question sources
+
+| Script | Source | Questions | License |
+|---|---|---|---|
+| `scripts/sources/openstax.ts` | OpenStax *Prealgebra*, *Elementary/Intermediate/College Algebra*, *Algebra & Trigonometry*, *Introductory Statistics* (read from OpenStax's GitHub) | ~1,300 grid-in (exercises with a single numeric answer) | CC BY-NC-SA 4.0: non-commercial use with attribution (added to each explanation); share derived sets under the same license |
+| `scripts/sources/agieval.ts` | AGIEval SAT-Math (Microsoft, arXiv:2304.06364) | ~180 multiple choice with worked solutions | Questions are from official SAT practice tests (College Board): for your own students, don't republish |
+
+```bash
+npx tsx scripts/sources/openstax.ts        # → data/openstax/questions.json (+ report.json)
+npx tsx scripts/sources/agieval.ts         # → data/agieval/questions.json
+npm run questions:import -- data/openstax/questions.json
+npm run questions:import -- data/agieval/questions.json
+```
+
+Solvable questions are written as active; unsolvable ones (needing a figure
+that isn't included, another exercise, etc.) are marked and only imported with
+`--include-unsolvable`. Exercises with several parts or non-numeric answers are
+skipped; `report.json` lists what was skipped and why. Skills (and for
+OpenStax, difficulty) are assigned by rules, so spot-check them with review
+mode.
+
+### Reviewing many questions
+
+In **Question bank**, filter by **Source** (College Board, OpenStax, AGIEval,
+samples…), status, skill, difficulty or text, then either:
+
+* **Bulk actions**: tick rows (or the header box, then **Select all N
+  matching** to cover every page) and **Activate**, **Deactivate** or
+  **Delete**. Delete keeps questions already used in a test.
+* **Review these**: one question at a time, rendered as students see it with
+  the answer marked. Keys: **A** activate, **S** skip (stays inactive),
+  **D** delete, **1/2/3** set difficulty, **E** open the full editor. Skill and
+  difficulty corrections are saved with the decision; the next question is
+  preloaded, so it's a keypress per question.
+
+A practical order: activate whole sources you trust in bulk (e.g. AGIEval,
+which is official SAT material), then review the rest by skill.
+
+### Moving questions to another site (e.g. local → production)
+
+1. On the source site: **Question bank**, filter (e.g. Status: All, or one
+   Source), then **Export these**. The JSON file contains the questions, their
+   figures (embedded) and whether each is active, so your review work carries
+   over.
+2. On the target site: **Question bank → Import**, choose the file.
+   Questions that already exist (same externalId) are skipped; tick **Update
+   questions that already exist** when importing a newer export to apply your
+   edits and active/inactive changes.
+
+Questions created by hand get the externalId `local:<id>` in the export, so
+importing the same file twice never duplicates them. The upload limit is
+50 MB; for bigger banks export one source at a time, or use the CLI:
+`npm run questions:import -- questions.json --update --with-status`.
+
+### Checking and repairing imported questions
+
+```bash
+npm run questions:check                    # list questions that refer to a missing definition/figure/table
+npm run questions:check -- --deactivate       # and take them out of rotation
+npm run questions:import -- <file> --update   # replace changed questions with a re-scraped version
+```
+
+`--update` replaces text, choices, answer key, skill and difficulty of
+questions whose externalId already exists (only when they changed). It never
+re-activates a question.
 
 To remove the dev sample questions:
 `DELETE FROM "Question" WHERE "externalId" LIKE 'sample-%';` (only if no test uses them).

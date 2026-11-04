@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Input, Notice } from "@/components/ui";
 import { DateTimeInput } from "@/components/LocalTime";
 import { Toggle } from "@/components/client-ui";
@@ -25,7 +26,7 @@ export function HomeworkForm({
   initial: HomeworkFormValues;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   // Re-mount after a successful save so the file picker clears.
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -37,7 +38,7 @@ export function HomeworkForm({
   const other = initial.allowedFormats.filter((e) => !covered.has(e)).join(", ");
 
   return (
-    <form action={formAction} className="space-y-5" key={version}>
+    <form onSubmit={onSubmit} className="space-y-5" key={version}>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Title" className="md:col-span-2">
           <Input name="title" defaultValue={initial.title} required maxLength={160} placeholder="e.g. Homework 4 — Systems of equations" />
@@ -82,7 +83,7 @@ export function HomeworkForm({
       </Field>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
       {state?.message && <Notice tone="ok">{state.message}</Notice>}
-      <Button disabled={pending}>{pending ? "Saving…" : submitLabel}</Button>
+      <Button pending={pending}>{submitLabel}</Button>
     </form>
   );
 }

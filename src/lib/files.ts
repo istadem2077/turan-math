@@ -9,19 +9,19 @@ export function formFiles(form: FormData, name: string): File[] {
 }
 
 /** Throws a user-facing error if the files break the size/count/format rules. */
-export function checkFiles(files: File[], allowed: string[] = []) {
+export function checkFiles(files: File[], allowed: string[] = [], maxFileBytes = MAX_FILE_BYTES) {
   if (files.length > MAX_FILES_PER_UPLOAD) throw new Error(`Upload at most ${MAX_FILES_PER_UPLOAD} files at a time.`);
   let total = 0;
   for (const f of files) {
     total += f.size;
-    if (f.size > MAX_FILE_BYTES) throw new Error(`"${f.name}" is larger than ${MAX_FILE_BYTES / 1024 / 1024} MB.`);
+    if (f.size > maxFileBytes) throw new Error(`"${f.name}" is larger than ${maxFileBytes / 1024 / 1024} MB.`);
     if (allowed.length && !allowed.includes(extOf(f.name)))
       throw new Error(`"${f.name}" isn't an accepted format. Accepted: ${formatsLabel(allowed)}.`);
   }
   if (total > MAX_UPLOAD_BYTES) throw new Error(`Files must total under ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`);
 }
 
-type Owner = { homeworkId: string } | { submissionId: string } | { feedbackSubmissionId: string };
+type Owner = { homeworkId: string } | { submissionId: string } | { feedbackSubmissionId: string } | { materialId: string };
 
 export async function toFileRows(files: File[], owner: Owner, uploadedById: string) {
   return Promise.all(
@@ -41,9 +41,9 @@ export const FILE_META = { id: true, filename: true, size: true, createdAt: true
 export type FileMeta = { id: string; filename: string; size: number; createdAt: Date };
 
 /**
- * Can this user download the file? Staff: any homework file. Students: the
- * assignment files of homework in their rooms, and the files (and feedback
- * files) of their own submissions.
+ * Can this user download the file? Staff: any file. Students: assignment
+ * files of homework and lecture-material files in their rooms, and the files
+ * (and feedback files) of their own submissions.
  */
 export async function canReadFile(user: CurrentUser, fileId: string): Promise<boolean> {
   if (user.role !== "STUDENT") return true;
@@ -52,6 +52,7 @@ export async function canReadFile(user: CurrentUser, fileId: string): Promise<bo
       id: fileId,
       OR: [
         { homework: { room: { members: { some: { studentId: user.id } } } } },
+        { material: { room: { members: { some: { studentId: user.id } } } } },
         { submission: { studentId: user.id } },
         { feedbackSubmission: { studentId: user.id } },
       ],

@@ -11,17 +11,42 @@ const VARIANTS: Record<Variant, string> = {
   ghost: "text-brand hover:bg-brand-soft border border-transparent",
   danger: "bg-white text-bad border border-bad/40 hover:bg-bad-soft",
 };
-const BTN = "inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:opacity-50 disabled:pointer-events-none";
+const BTN =
+  "relative inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition duration-150 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none";
 
-export function Button({ variant = "primary", className, ...p }: ComponentProps<"button"> & { variant?: Variant }) {
-  return <button className={cx(BTN, VARIANTS[variant], className)} {...p} />;
+/**
+ * `pending`: disables the button and shows a spinner over the (hidden) label,
+ * so the button keeps its size instead of jumping to "Saving…".
+ */
+export function Button({
+  variant = "primary",
+  className,
+  pending,
+  children,
+  disabled,
+  ...p
+}: ComponentProps<"button"> & { variant?: Variant; pending?: boolean }) {
+  return (
+    <button className={cx(BTN, VARIANTS[variant], pending && "disabled:opacity-80", className)} disabled={disabled || pending} aria-busy={pending || undefined} {...p}>
+      {pending ? (
+        <>
+          <span className="invisible inline-flex items-center gap-2">{children}</span>
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="spinner" aria-label="Working" />
+          </span>
+        </>
+      ) : (
+        children
+      )}
+    </button>
+  );
 }
 
 export function LinkButton({ variant = "primary", className, ...p }: ComponentProps<typeof Link> & { variant?: Variant }) {
   return <Link className={cx(BTN, VARIANTS[variant], className)} {...p} />;
 }
 
-const FIELD = "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20";
+const FIELD = "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] duration-150 focus:border-brand focus:ring-2 focus:ring-brand/20";
 
 export function Input({ className, ...p }: ComponentProps<"input">) {
   return <input className={cx(FIELD, className)} {...p} />;
@@ -88,7 +113,7 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Table({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-white">
-      <table className="w-full text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-2.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted [&_thead]:bg-canvas [&_tbody_tr]:border-t [&_tbody_tr]:border-line">
+      <table className="w-full text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-2.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted [&_thead]:bg-canvas [&_tbody_tr]:border-t [&_tbody_tr]:border-line [&_tbody_tr]:transition-colors">
         {children}
       </table>
     </div>
@@ -96,5 +121,5 @@ export function Table({ children }: { children: ReactNode }) {
 }
 
 export function Notice({ tone = "brand", children }: { tone?: Tone; children: ReactNode }) {
-  return <div className={cx("rounded-lg border px-4 py-3 text-sm", TONES[tone])}>{children}</div>;
+  return <div className={cx("anim-fade rounded-lg border px-4 py-3 text-sm", TONES[tone])}>{children}</div>;
 }

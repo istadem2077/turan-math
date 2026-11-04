@@ -31,7 +31,8 @@ export function RoomAssignments({ studentId, rooms, assigned }: { studentId: str
       </div>
       <div className="flex items-center gap-3">
         <Button
-          disabled={!dirty || pending}
+          pending={pending}
+          disabled={!dirty}
           onClick={() =>
             start(async () => {
               await setStudentRooms(studentId, [...sel]);
@@ -39,9 +40,9 @@ export function RoomAssignments({ studentId, rooms, assigned }: { studentId: str
             })
           }
         >
-          {pending ? "Saving…" : "Save room assignments"}
+          Save room assignments
         </Button>
-        {saved && !dirty && <span className="text-sm text-ok">Saved</span>}
+        {saved && !dirty && <span className="anim-fade text-sm text-ok">Saved</span>}
       </div>
     </div>
   );
@@ -53,7 +54,7 @@ export function EditName({ userId, name }: { userId: string; name: string }) {
   return (
     <div className="flex gap-2">
       <Input value={v} onChange={(e) => setV(e.target.value)} maxLength={100} />
-      <Button variant="secondary" disabled={pending || v.trim() === name || !v.trim()} onClick={() => start(() => updateStudentName(userId, v))}>
+      <Button variant="secondary" pending={pending} disabled={v.trim() === name || !v.trim()} onClick={() => start(() => updateStudentName(userId, v))}>
         Save
       </Button>
     </div>

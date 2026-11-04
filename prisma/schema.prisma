@@ -5,6 +5,7 @@
 //                            │        │
 //                            │        └──< Attempt ──< Response >── TestItem
 //                            │
+//                            ├──< Material (lecture slides/files and links)
 //                            └──< Homework ──< HomeworkSubmission
 //                                    │               │
 //                                    └── StoredFile ─┘ (assignment, student and feedback files)
@@ -94,6 +95,7 @@ model User {
   submissions       HomeworkSubmission[] @relation("SubmissionStudent")
   submissionsGraded HomeworkSubmission[] @relation("SubmissionGrader")
   filesUploaded     StoredFile[]         @relation("FileUploadedBy")
+  materialsCreated  Material[]           @relation("MaterialCreatedBy")
   testsCreated      Test[]               @relation("TestCreatedBy")
   questionsCreated  Question[]           @relation("QuestionCreatedBy")
 
@@ -133,9 +135,12 @@ model Question {
   sprAnswers    String[] @default([])
   explanation   String?
 
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  active     Boolean  @default(true)
+  /// Why this question was flagged as unsolvable when imported (missing
+  /// figure, table, definition…). Shown in review mode; cleared on activation.
+  reviewNote String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   createdById String?
   createdBy   User?   @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -198,6 +203,7 @@ model Room {
   members   RoomMember[]
   quizzes   Quiz[]
   homeworks Homework[]
+  materials Material[]
 }
 
 model RoomMember {
@@ -293,6 +299,27 @@ model Homework {
   @@index([roomId, dueAt])
 }
 
+/// Lecture material posted to a room: files (slides, documents), a link, or both.
+model Material {
+  id          String  @id @default(cuid())
+  roomId      String
+  room        Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  title       String
+  /// Markdown with LaTeX, optional.
+  description String  @default("")
+  /// Optional http(s) link (e.g. Google Slides, a video).
+  url         String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("MaterialCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  files StoredFile[] @relation("MaterialFiles")
+
+  @@index([roomId, createdAt])
+}
+
 /// One student's hand-in for one homework (re-submitting replaces it until it is graded).
 model HomeworkSubmission {
   id          String   @id @default(cuid())
@@ -322,7 +349,7 @@ model HomeworkSubmission {
   @@index([studentId])
 }
 
-/// Uploaded homework files (bytea). Served by /api/files/:id after an access
+/// Uploaded homework and lecture-material files (bytea). Served by /api/files/:id after an access
 /// check. Exactly one of the owner columns is set.
 model StoredFile {
   id        String   @id @default(cuid())
@@ -341,10 +368,13 @@ model StoredFile {
   submission           HomeworkSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id], onDelete: Cascade)
   feedbackSubmissionId String?
   feedbackSubmission   HomeworkSubmission? @relation("SubmissionFeedbackFiles", fields: [feedbackSubmissionId], references: [id], onDelete: Cascade)
+  materialId           String?
+  material             Material?           @relation("MaterialFiles", fields: [materialId], references: [id], onDelete: Cascade)
 
   @@index([homeworkId])
   @@index([submissionId])
   @@index([feedbackSubmissionId])
+  @@index([materialId])
 }
 
 model Response {

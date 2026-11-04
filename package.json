@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:generate": "prisma generate",
@@ -17,7 +18,12 @@
     "postinstall": "prisma generate",
     "docker:up": "docker compose up -d --build",
     "docker:db": "docker compose up -d db",
-    "cbqb:scrape": "tsx scripts/cbqb/scrape.ts"
+    "cbqb:scrape": "tsx scripts/cbqb/scrape.ts",
+    "questions:reset": "npm run -s db:prepare && tsx scripts/reset-question-bank.ts",
+    "questions:rebuild": "npm run -s db:prepare && tsx scripts/rebuild-question-bank.ts",
+    "questions:import": "npm run -s db:prepare && tsx scripts/import-questions.ts",
+    "db:prepare": "prisma generate >/dev/null && prisma migrate deploy",
+    "questions:check": "npm run -s db:prepare && tsx scripts/check-questions.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -38,6 +44,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/node": "^22.20.5",
     "@types/papaparse": "^5.5.2",

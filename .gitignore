@@ -9,3 +9,8 @@ next-env.d.ts
 
 # scraped question data (College Board content, not for the repo)
 /data
+
+# Playwright
+/playwright-report
+/test-results
+/blob-report

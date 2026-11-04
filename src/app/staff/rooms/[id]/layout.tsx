@@ -7,7 +7,7 @@ export default async function RoomLayout({ children, params }: { children: React
   const { id } = await params;
   const room = await db.room.findUnique({
     where: { id },
-    include: { _count: { select: { members: true, quizzes: true, homeworks: true } } },
+    include: { _count: { select: { members: true, quizzes: true, homeworks: true, materials: true } } },
   });
   if (!room) notFound();
   return (
@@ -21,7 +21,7 @@ export default async function RoomLayout({ children, params }: { children: React
       </div>
       <RoomTabs
         roomId={id}
-        counts={{ students: room._count.members, quizzes: room._count.quizzes, homework: room._count.homeworks }}
+        counts={{ students: room._count.members, quizzes: room._count.quizzes, homework: room._count.homeworks, materials: room._count.materials }}
       />
       <div className="mt-6">{children}</div>
     </>

@@ -6,9 +6,11 @@ import { db } from "@/lib/db";
 import { generatePassword, hashPassword, requireAdmin, requireStaff } from "@/lib/auth";
 import { createTest, generateAutoTest } from "@/lib/tests";
 import { parseImportFile, toQuestionData } from "@/lib/question-import";
+import { importRows } from "@/lib/question-store";
 import { MCQ_KEYS } from "@/lib/taxonomy";
 import { Prisma } from "@/generated/prisma/client";
 import { errorText } from "@/lib/errors";
+import { questionWhere, type QuestionFilters } from "@/lib/question-filters";
 
 export type ActionResult = { ok?: boolean; error?: string; message?: string; password?: string; username?: string };
 
@@ -153,7 +155,7 @@ export async function saveManualTest(title: string, modules: string[][]): Promis
 export async function deleteTest(testId: string) {
   await requireStaff();
   const used = await db.quiz.count({ where: { testId } });
-  if (used) throw new Error("This test is assigned to a quiz.");
+  if (used) return { error: "This test is assigned to a quiz, so it can't be deleted." };
   await db.test.delete({ where: { id: testId } });
   redirect("/staff/tests");
 }
@@ -278,7 +280,8 @@ export async function saveQuestion(id: string | null, _: ActionResult | undefine
 
 export async function setQuestionActive(id: string, active: boolean) {
   await requireAdmin();
-  await db.question.update({ where: { id }, data: { active } });
+  // Activating means a person checked it: the import's "unsolvable" flag no longer applies.
+  await db.question.update({ where: { id }, data: { active, ...(active && { reviewNote: null }) } });
   revalidatePath(`/staff/questions/${id}`);
   revalidatePath("/staff/questions");
 }
@@ -291,12 +294,10 @@ export async function importQuestions(_: unknown, form: FormData) {
     const rows = parseImportFile(file.name, await file.text());
     const skills = await db.skill.findMany();
     const { ok, errors } = toQuestionData(rows, skills);
-    let inserted = 0;
-    for (let i = 0; i < ok.length; i += 1000) {
-      inserted += (await db.question.createMany({ data: ok.slice(i, i + 1000), skipDuplicates: true })).count;
-    }
+    const update = form.get("update") === "on";
+    const r = await importRows(ok, { update, withStatus: update, includeUnsolvable: form.get("includeUnsolvable") === "on" });
     revalidatePath("/staff/questions");
-    return { total: rows.length, valid: ok.length, inserted, duplicates: ok.length - inserted, errors: errors.slice(0, 200), errorCount: errors.length };
+    return { total: rows.length, valid: ok.length, ...r, errors: errors.slice(0, 200), errorCount: errors.length };
   } catch (e) {
     return { error: errorText(e) };
   }
@@ -311,4 +312,47 @@ export async function uploadAsset(form: FormData): Promise<{ url?: string; error
     data: { mimeType: file.type, filename: file.name, data: new Uint8Array(await file.arrayBuffer()) },
   });
   return { url: `/api/assets/${asset.id}` };
+}
+
+// ───────────────────────── Reviewing questions in bulk ─────────────────────────
+
+export type BulkTarget = { ids: string[] } | { filters: QuestionFilters };
+
+/** Activate, deactivate or delete many questions: the selected ones, or all that match a filter. */
+export async function bulkQuestions(target: BulkTarget, op: "activate" | "deactivate" | "delete"): Promise<ActionResult> {
+  await requireAdmin();
+  const where: Prisma.QuestionWhereInput = "ids" in target ? { id: { in: target.ids } } : questionWhere(target.filters);
+  let message: string;
+  if (op === "delete") {
+    // Questions used in a test stay: past attempts and reviews point at them.
+    const total = await db.question.count({ where });
+    const { count } = await db.question.deleteMany({ where: { AND: [where, { testItems: { none: {} } }] } });
+    message = `Deleted ${count} question${count === 1 ? "" : "s"}.` + (total > count ? ` ${total - count} used in tests ${total - count === 1 ? "was" : "were"} kept (deactivate them instead).` : "");
+  } else {
+    const { count } = await db.question.updateMany({ where, data: op === "activate" ? { active: true, reviewNote: null } : { active: false } });
+    message = `${op === "activate" ? "Activated" : "Deactivated"} ${count} question${count === 1 ? "" : "s"}.`;
+  }
+  revalidatePath("/staff/questions");
+  return { ok: true, message };
+}
+
+/** One step of review mode: optionally fix skill/difficulty, then activate, keep (skip) or delete. */
+export async function reviewQuestion(
+  id: string,
+  decision: "activate" | "skip" | "delete",
+  edits: { skillId: number; difficulty: "EASY" | "MEDIUM" | "HARD" },
+): Promise<ActionResult> {
+  await requireAdmin();
+  if (decision === "delete") {
+    const used = await db.testItem.count({ where: { questionId: id } });
+    if (used) return { error: "This question is used in a test, so it can't be deleted." };
+    await db.question.delete({ where: { id } });
+    return { ok: true };
+  }
+  const skill = await db.skill.findUniqueOrThrow({ where: { id: edits.skillId } });
+  await db.question.update({
+    where: { id },
+    data: { skillId: skill.id, domain: skill.domain, difficulty: edits.difficulty, ...(decision === "activate" && { active: true, reviewNote: null }) },
+  });
+  return { ok: true };
 }

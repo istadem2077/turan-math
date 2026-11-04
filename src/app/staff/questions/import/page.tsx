@@ -33,7 +33,7 @@ export default async function ImportPage() {
       <Link href="/staff/questions" className="text-sm font-semibold text-brand hover:underline">
         ← Question bank
       </Link>
-      <PageHeader title="Import questions" subtitle="Upload JSON or CSV. Rows whose externalId already exists are skipped, so re-uploading is safe." />
+      <PageHeader title="Import questions" subtitle="Upload JSON or CSV, or a file from Question bank → Export (figures and active/inactive status included). Rows whose externalId already exists are skipped unless you choose to update them, so re-uploading is safe." />
       <div className="space-y-6">
         <Card>
           <ImportForm />

@@ -30,6 +30,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { SKILLS } from "../../src/lib/taxonomy";
 import { htmlToMarkdown, remoteImages, type Figure } from "./convert";
+import { markSolvability } from "../sources/common";
 
 const ENDPOINTS = {
   list: "https://qbank-api.collegeboard.org/msreportingquestionbank-prod/questionbank/digital/get-questions",
@@ -228,6 +229,8 @@ type OutRow = {
   choices?: Record<string, string>;
   answer: string | string[];
   explanation?: string;
+  active?: boolean;
+  unsolvable?: string;
 };
 
 async function fetchList(): Promise<Meta[]> {
@@ -331,6 +334,8 @@ async function main() {
     if (++done % 50 === 0 || done === metas.length) console.log(`  ${done}/${metas.length}`);
   });
 
+  // Missing figure/table/definition or broken math: kept, marked unsolvable (inactive).
+  markSolvability(rows as Parameters<typeof markSolvability>[0]);
   rows.sort((a, b) => a.externalId.localeCompare(b.externalId));
   writeFileSync(join(OUT, "questions.json"), JSON.stringify(rows, null, 2));
 
@@ -350,7 +355,8 @@ async function main() {
   };
   writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
 
-  console.log(`\nConverted ${rows.length}, failed ${failures.length}, figures ${figureCount}`);
+  const unsolvable = rows.filter((r) => r.unsolvable).length;
+  console.log(`\nConverted ${rows.length} (${rows.length - unsolvable} solvable, ${unsolvable} marked unsolvable), failed ${failures.length}, figures ${figureCount}`);
   console.log(`  by domain: ${JSON.stringify(byDomain)}`);
   if (unmappedSkills.size) console.log(`  unmapped skills: ${[...unmappedSkills.keys()].join("; ")}`);
   if (remote.length) console.log(`  ${remote.length} remote images left as URLs (see report.json)`);
