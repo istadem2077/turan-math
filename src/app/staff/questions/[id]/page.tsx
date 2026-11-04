@@ -27,7 +27,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
             Question
             <Badge tone="brand">{DOMAIN_LABEL[q.domain]}</Badge>
             <Badge>{DIFFICULTY_LABEL[q.difficulty]}</Badge>
-            {!q.active && <Badge tone="bad">Retired</Badge>}
+            {!q.active && <Badge tone="warn">Inactive</Badge>}
           </span>
         }
         subtitle={`${q.skill.name}${q.externalId ? ` · ${q.externalId}` : ""} · used in ${q._count.testItems} test(s)`}
@@ -38,7 +38,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
               Retire
             </ActionButton>
           ) : (
-            <ActionButton action={setQuestionActive.bind(null, id, true)}>Reactivate</ActionButton>
+            <ActionButton variant="primary" action={setQuestionActive.bind(null, id, true)}>Activate</ActionButton>
           ))
         }
       />

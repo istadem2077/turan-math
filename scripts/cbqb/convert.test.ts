@@ -29,6 +29,24 @@ describe("htmlToMarkdown", () => {
     expect(markdown.replace(/ /g, "")).toBe("Solve:\n\n$$y=2$$\n\nDone.");
   });
 
+  it("keeps an equation wrapped in aria-hidden (e.g. the function definition)", () => {
+    const { markdown } = htmlToMarkdown(
+      `<div aria-hidden="true">${M("<mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mn>4</mn><mi>x</mi>", true)}</div><p>For the function f defined above, what is ${M("<mi>f</mi><mo>(</mo><mn>1</mn><mo>)</mo>")}?</p>`,
+      "t",
+    );
+    expect(markdown.replace(/ /g, "")).toMatch(/^\$\$f\\left\(x\\right\)=4x\$\$\n\nForthefunctionfdefinedabove/);
+  });
+
+  it("treats display=block math inside a sentence as inline", () => {
+    const { markdown } = htmlToMarkdown(`<p>What is the value of ${M("<mi>f</mi><mo>(</mo><mn>1</mn><mo>)</mo>", true)}?</p>`, "t");
+    expect(tight(markdown)).toBe("What is the value of $f\\left(1\\right)$?");
+  });
+
+  it("keeps consecutive display equations on their own lines", () => {
+    const { markdown } = htmlToMarkdown(`<div>${M("<mi>y</mi><mo>=</mo><mn>2</mn>", true)}${M("<mi>x</mi><mo>=</mo><mn>3</mn>", true)}</div>`, "t");
+    expect(markdown.replace(/ /g, "")).toBe("$$y=2$$\n\n$$x=3$$");
+  });
+
   it("escapes currency dollars outside math", () => {
     const { markdown } = htmlToMarkdown(`<p>A shirt costs $12 and a hat costs $8.</p>`, "t");
     expect(markdown).toBe("A shirt costs \\$12 and a hat costs \\$8.");

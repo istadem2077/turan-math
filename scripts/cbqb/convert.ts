@@ -18,8 +18,12 @@ export type Converted = { markdown: string; figures: Figure[] };
 const turndown = new TurndownService({ headingStyle: "atx", bulletListMarker: "-", emDelimiter: "*" });
 turndown.use(gfm);
 // CB marks up a lot of screen-reader-only text; it would duplicate the math.
+// Never drop an element that holds converted math or a figure, though: some
+// items wrap the visible equation itself in aria-hidden, and dropping it
+// silently loses e.g. the function definition the question refers to.
 turndown.remove((node) => {
   const el = node as unknown as Element;
+  if (/QQ[MF]\d+ZZ/.test(el.textContent ?? "")) return false;
   const cls = el.getAttribute?.("class") ?? "";
   return /\b(sr-only|visually-hidden)\b/.test(cls) || el.getAttribute?.("aria-hidden") === "true";
 });
@@ -27,6 +31,7 @@ turndown.remove((node) => {
 /** Placeholders are plain alphanumerics so Turndown neither escapes nor splits them. */
 const PH = (kind: "M" | "F", i: number) => `QQ${kind}${i}ZZ`;
 const PH_RE = /QQ([MF])(\d+)ZZ/g;
+
 
 export function mathmlToLatex(mathml: string): string {
   return (
@@ -37,6 +42,24 @@ export function mathmlToLatex(mathml: string): string {
       .replace(/\|/g, "\\vert ")
       .trim()
   );
+}
+
+const INLINE_TAGS = new Set(["SPAN", "EM", "STRONG", "B", "I", "A", "SUB", "SUP", "U"]);
+
+/** True when text or inline content sits right before or after the node (same line). */
+function inSentence(node: Element): boolean {
+  const near = (dir: "previousSibling" | "nextSibling") => {
+    let n = node[dir];
+    // Skip whitespace and already-converted neighbouring formulas (placeholders).
+    const neutral = (x: ChildNode) =>
+      (x.nodeType === 3 && /^\s*(QQM\d+ZZ\s*)*$/.test(x.textContent ?? "")) ||
+      (x.nodeType === 1 && (x as Element).tagName.toUpperCase() === "MATH");
+    while (n && neutral(n)) n = n[dir];
+    if (!n) return false;
+    if (n.nodeType === 3) return true;
+    return n.nodeType === 1 && INLINE_TAGS.has((n as Element).tagName.toUpperCase());
+  };
+  return near("previousSibling") || near("nextSibling");
 }
 
 /**
@@ -54,7 +77,9 @@ export function htmlToMarkdown(html: string | null | undefined, figBase: string)
 
   // 1. MathML -> LaTeX placeholders
   for (const m of Array.from(root.querySelectorAll("math"))) {
-    const display = m.getAttribute("display") === "block";
+    // display="block" in the middle of a sentence is really inline math
+    // ("what is the value of f(−1)?"); only a formula standing alone is display.
+    const display = m.getAttribute("display") === "block" && !inSentence(m);
     let tex = "";
     try {
       tex = mathmlToLatex(m.outerHTML);

@@ -1,7 +1,11 @@
 /**
  * CLI bulk import for very large question dumps:
- *   npx tsx scripts/import-questions.ts path/to/questions.json|csv [--figures <dir>]
- * Rows whose externalId already exists are skipped.
+ *   npx tsx scripts/import-questions.ts path/to/questions.json|csv [--figures <dir>] [--update]
+ * Rows whose externalId already exists are skipped, unless --update is given:
+ * then their text, choices, answer key, skill and difficulty are replaced when
+ * they changed (e.g. after a scraper fix). Active/inactive is never changed by
+ * --update. Past attempts keep their scores (they were graded when submitted)
+ * but their review pages show the updated text.
  *
  * --figures <dir>: question text may reference figures as ![alt](figure:<file>)
  * (scripts/cbqb/scrape.ts writes them this way). Each referenced file is read
@@ -12,6 +16,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { db } from "../src/lib/db";
+import { Prisma } from "../src/generated/prisma/client";
 import { parseImportFile, toQuestionData } from "../src/lib/question-import";
 
 const MIME: Record<string, string> = {
@@ -51,10 +56,55 @@ async function attachFigures(rows: Row[], dir: string) {
   return assetIds.size;
 }
 
+/** Text with figure links normalized, so a re-scraped row compares equal to its imported copy. */
+const comparable = (v: unknown) => JSON.stringify(v ?? null).replace(/\]\((?:figure:[^)\s]+|\/api\/assets\/[^)\s]+)\)/g, "](F)");
+
+async function updateExisting(rows: Row[], figuresDir: string | undefined) {
+  const current = new Map(
+    (await db.question.findMany({ where: { externalId: { in: rows.map((r) => r.externalId!) } } })).map((q) => [q.externalId!, q]),
+  );
+  const changed = rows.filter((r) => {
+    const q = current.get(r.externalId!)!;
+    const choices = "choices" in r ? r.choices : null;
+    return (
+      comparable(r.stem) !== comparable(q.stem) ||
+      comparable(r.explanation ?? null) !== comparable(q.explanation) ||
+      comparable(choices) !== comparable(q.choices) ||
+      (("correctChoice" in r ? r.correctChoice : null) ?? null) !== q.correctChoice ||
+      comparable(r.sprAnswers) !== comparable(q.sprAnswers) ||
+      r.skillId !== q.skillId ||
+      r.difficulty !== q.difficulty ||
+      r.type !== q.type
+    );
+  });
+  if (changed.some((r) => JSON.stringify(r).includes("](figure:"))) {
+    if (!figuresDir) throw new Error("Rows reference figure:… files; pass --figures <dir>");
+    await attachFigures(changed, figuresDir);
+  }
+  for (const r of changed) {
+    await db.question.update({
+      where: { externalId: r.externalId! },
+      data: {
+        domain: r.domain,
+        skillId: r.skillId,
+        difficulty: r.difficulty,
+        type: r.type,
+        stem: r.stem,
+        explanation: r.explanation ?? null,
+        choices: "choices" in r && r.choices ? r.choices : Prisma.DbNull,
+        correctChoice: "correctChoice" in r ? r.correctChoice : null,
+        sprAnswers: r.sprAnswers,
+      },
+    });
+  }
+  return changed.length;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const fi = args.indexOf("--figures");
   const figuresDir = fi >= 0 ? args[fi + 1] : undefined;
+  const update = args.includes("--update");
   const file = args.find((a, i) => !a.startsWith("--") && (fi < 0 || i !== fi + 1));
   if (!file) throw new Error("Usage: tsx scripts/import-questions.ts <file.json|file.csv> [--figures <dir>]");
 
@@ -77,13 +127,17 @@ async function main() {
   if (usesFigures && !figuresDir) throw new Error("Rows reference figure:… files; pass --figures <dir>");
   const assets = figuresDir ? await attachFigures(fresh, figuresDir) : 0;
 
+  let updated = 0;
+  if (update) updated = await updateExisting(ok.filter((r) => r.externalId && existing.has(r.externalId)), figuresDir);
+
   let inserted = 0;
   for (let i = 0; i < fresh.length; i += 1000) {
     const res = await db.question.createMany({ data: fresh.slice(i, i + 1000), skipDuplicates: true });
     inserted += res.count;
   }
   console.log(
-    `Valid: ${ok.length}, inserted: ${inserted}, skipped (duplicate externalId): ${ok.length - inserted}, invalid: ${errors.length}, figures stored: ${assets}`,
+    `Valid: ${ok.length}, inserted: ${inserted}, skipped (duplicate externalId): ${ok.length - inserted}, invalid: ${errors.length}, figures stored: ${assets}` +
+      (update ? `, updated: ${updated}` : ""),
   );
 }
 

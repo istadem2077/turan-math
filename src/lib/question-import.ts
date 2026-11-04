@@ -32,6 +32,8 @@ export const ImportRow = z
     choices: z.record(z.string(), z.string()).optional(),
     answer: z.union([z.string(), z.array(z.string())]),
     explanation: z.string().optional(),
+    /** false = imported as inactive (not drawn into tests until a staff member activates it). Default true. */
+    active: z.preprocess((v) => (typeof v === "string" ? !/^(false|0|no)$/i.test(v.trim()) : v), z.boolean()).optional(),
   })
   .superRefine((r, ctx) => {
     if (r.type === "MCQ") {
@@ -47,7 +49,7 @@ export const ImportRow = z
   });
 export type ImportRow = z.infer<typeof ImportRow>;
 
-/** CSV columns: externalId, domain, skill, difficulty, type, stem, choiceA..choiceD, answer, explanation */
+/** CSV columns: externalId, domain, skill, difficulty, type, stem, choiceA..choiceD, answer, explanation, active (optional) */
 function csvToObjects(text: string): Record<string, unknown>[] {
   const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
   return parsed.data.map((r) => {
@@ -62,6 +64,7 @@ function csvToObjects(text: string): Record<string, unknown>[] {
       choices,
       answer: r.answer ?? "",
       explanation: r.explanation || undefined,
+      active: r.active || undefined,
     };
   });
 }
@@ -107,6 +110,7 @@ export function toQuestionData(rows: unknown[], skills: SkillLookup) {
       type: r.type,
       stem: r.stem,
       explanation: r.explanation,
+      active: r.active ?? true,
     };
     if (r.type === "MCQ") {
       const c = Object.fromEntries(Object.entries(r.choices!).map(([k, v]) => [k.toUpperCase(), v]));

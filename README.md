@@ -234,6 +234,38 @@ The question bank has no public API contract; if it changes, `--probe` shows
 what it returns and `ENDPOINTS` / `normalizeItem()` in the script need updating.
 Check College Board's terms of use for how you may use the questions.
 
+### Other question sources
+
+| Script | Source | Questions | License |
+|---|---|---|---|
+| `scripts/sources/openstax.ts` | OpenStax *Prealgebra*, *Elementary/Intermediate/College Algebra*, *Algebra & Trigonometry*, *Introductory Statistics* (read from OpenStax's GitHub) | ~1,300 grid-in (exercises with a single numeric answer) | CC BY-NC-SA 4.0: non-commercial use with attribution (added to each explanation); share derived sets under the same license |
+| `scripts/sources/agieval.ts` | AGIEval SAT-Math (Microsoft, arXiv:2304.06364) | ~180 multiple choice with worked solutions | Questions are from official SAT practice tests (College Board): for your own students, don't republish |
+
+```bash
+npx tsx scripts/sources/openstax.ts        # → data/openstax/questions.json (+ report.json)
+npx tsx scripts/sources/agieval.ts         # → data/agieval/questions.json
+npx tsx scripts/import-questions.ts data/openstax/questions.json
+npx tsx scripts/import-questions.ts data/agieval/questions.json
+```
+
+Skills (and for OpenStax, difficulty) are assigned by rules, so both scripts
+mark every question **inactive**: review them under **Question bank → Status:
+Inactive** and press **Activate** on the ones you want in tests. Exercises with
+figures, several parts, non-numeric answers or missing context are skipped;
+`report.json` lists what was skipped and why.
+
+### Checking and repairing imported questions
+
+```bash
+npx tsx scripts/check-questions.ts                    # list questions that refer to a missing definition/figure/table
+npx tsx scripts/check-questions.ts --deactivate       # and take them out of rotation
+npx tsx scripts/import-questions.ts <file> --update   # replace changed questions with a re-scraped version
+```
+
+`--update` replaces text, choices, answer key, skill and difficulty of
+questions whose externalId already exists (only when they changed). It never
+re-activates a question.
+
 To remove the dev sample questions:
 `DELETE FROM "Question" WHERE "externalId" LIKE 'sample-%';` (only if no test uses them).
 

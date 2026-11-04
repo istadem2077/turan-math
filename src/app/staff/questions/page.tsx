@@ -120,7 +120,7 @@ export default async function QuestionsPage({
           </Select>
           <Select name="status" defaultValue={sp.status ?? ""}>
             <option value="">Active</option>
-            <option value="inactive">Retired</option>
+            <option value="inactive">Inactive (retired or to review)</option>
             <option value="all">All</option>
           </Select>
           <div className="flex gap-2">
