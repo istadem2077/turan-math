@@ -1,34 +1,50 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/auth";
-import { Badge, Card, Empty, LinkButton, PageHeader, Select, Input, Button, Table } from "@/components/ui";
+import { Card, Empty, LinkButton, PageHeader, Select, Input, Button, Table } from "@/components/ui";
 import { DIFFICULTIES, DIFFICULTY_LABEL, DOMAINS, DOMAIN_LABEL, DOMAIN_SHORT } from "@/lib/taxonomy";
-import type { Prisma } from "@/generated/prisma/client";
+import { SOURCE_LABEL, cleanFilters, filterQuery, questionWhere } from "@/lib/question-filters";
+import { QuestionTable } from "./QuestionTable";
 
 const PAGE = 30;
+
+/** Plain-text preview of a stem for the list: LaTeX layout and Markdown removed. */
+function snippet(stem: string) {
+  return stem
+    .replace(/\\\$/g, "\u0000") // keep prices ("\$12") while math "$" delimiters are removed
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "[figure]")
+    .replace(/\\(begin|end)\{[^}]*\}/g, " ")
+    .replace(/\\(d|t)?frac\{([^{}]*)\}\{([^{}]*)\}/g, "($2)/($3)")
+    .replace(/\\(text|mathrm|mathbf)\{([^{}]*)\}/g, "$2")
+    .replace(/\\\\|&|\$|\\(left|right)|[{}*_]{1,2}/g, " ")
+    .replace(/\\([a-zA-Z]+)/g, "$1")
+    .replace(/\s+/g, " ")
+    .replace(/\u0000/g, "$")
+    .trim()
+    .slice(0, 160);
+}
 
 export default async function QuestionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ domain?: string; skillId?: string; difficulty?: string; type?: string; q?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ domain?: string; skillId?: string; difficulty?: string; type?: string; q?: string; status?: string; source?: string; page?: string }>;
 }) {
   const me = await requireStaff();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
-  const where: Prisma.QuestionWhereInput = {
-    ...(sp.status === "inactive" ? { active: false } : sp.status === "all" ? {} : { active: true }),
-    ...(sp.domain && { domain: sp.domain as never }),
-    ...(sp.skillId && { skillId: Number(sp.skillId) }),
-    ...(sp.difficulty && { difficulty: sp.difficulty as never }),
-    ...(sp.type && { type: sp.type as never }),
-    ...(sp.q && { stem: { contains: sp.q, mode: "insensitive" } }),
-  };
+  const filters = cleanFilters(sp);
+  const where = questionWhere(filters);
   const [skills, total, rows, matrix] = await Promise.all([
     db.skill.findMany({ orderBy: { sortOrder: "asc" } }),
     db.question.count({ where }),
     db.question.findMany({ where, include: { skill: true }, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE, take: PAGE }),
     db.question.groupBy({ by: ["domain", "difficulty"], where: { active: true }, _count: true }),
   ]);
+  // Where questions came from (externalId prefix), with how many are waiting for review.
+  const sources = await db.$queryRaw<{ src: string; total: number; inactive: number }[]>`
+    SELECT coalesce(substring("externalId" from '^[a-z]+'), 'none') AS src,
+           count(*)::int AS total, count(*) FILTER (WHERE NOT active)::int AS inactive
+    FROM "Question" GROUP BY 1 ORDER BY 2 DESC`;
   const cell = (d: string, f: string) => matrix.find((m) => m.domain === d && m.difficulty === f)?._count ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const qs = (p: number) => {
@@ -82,7 +98,7 @@ export default async function QuestionsPage({
           </Table>
         </Card>
 
-        <form className="grid gap-2 rounded-xl border border-line bg-white p-4 md:grid-cols-3 lg:grid-cols-6">
+        <form className="grid gap-2 rounded-xl border border-line bg-white p-4 md:grid-cols-3 lg:grid-cols-7">
           <Select name="domain" defaultValue={sp.domain ?? ""}>
             <option value="">All domains</option>
             {DOMAINS.map((d) => (
@@ -118,6 +134,15 @@ export default async function QuestionsPage({
             <option value="MCQ">Multiple choice</option>
             <option value="SPR">Student-produced</option>
           </Select>
+          <Select name="source" defaultValue={sp.source ?? ""}>
+            <option value="">All sources</option>
+            {sources.map((x) => (
+              <option key={x.src} value={x.src}>
+                {SOURCE_LABEL[x.src] ?? x.src} ({x.total.toLocaleString()}
+                {x.inactive ? `, ${x.inactive.toLocaleString()} inactive` : ""})
+              </option>
+            ))}
+          </Select>
           <Select name="status" defaultValue={sp.status ?? ""}>
             <option value="">Active</option>
             <option value="inactive">Inactive (retired or to review)</option>
@@ -133,33 +158,28 @@ export default async function QuestionsPage({
           <Empty>No questions match.</Empty>
         ) : (
           <>
-            <Table>
-              <thead>
-                <tr>
-                  <th>Question</th>
-                  <th>Domain / skill</th>
-                  <th>Difficulty</th>
-                  <th>Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((q) => (
-                  <tr key={q.id} className={q.active ? "" : "opacity-60"}>
-                    <td className="max-w-md">
-                      <Link href={`/staff/questions/${q.id}`} className="line-clamp-2 text-brand hover:underline">
-                        {q.stem.replace(/\$/g, "").slice(0, 160)}
-                      </Link>
-                    </td>
-                    <td>
-                      <div className="font-medium">{DOMAIN_SHORT[q.domain]}</div>
-                      <div className="text-xs text-muted">{q.skill.name}</div>
-                    </td>
-                    <td>{DIFFICULTY_LABEL[q.difficulty]}</td>
-                    <td>{q.type === "MCQ" ? "MCQ" : <Badge tone="warn">SPR</Badge>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            {isAdmin && total > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm">
+                <span className="text-muted">
+                  Go through these {total.toLocaleString()} one by one, with keyboard shortcuts: <b>A</b> activate, <b>S</b> skip, <b>D</b> delete.
+                </span>
+                <LinkButton href={`/staff/questions/review?${filterQuery(filters)}`}>Review these</LinkButton>
+              </div>
+            )}
+            <QuestionTable
+              total={total}
+              filters={filters}
+              canEdit={isAdmin}
+              rows={rows.map((q) => ({
+                id: q.id,
+                stem: snippet(q.stem),
+                domain: DOMAIN_SHORT[q.domain],
+                skill: q.skill.name,
+                difficulty: DIFFICULTY_LABEL[q.difficulty],
+                type: q.type,
+                active: q.active,
+              }))}
+            />
             <div className="flex items-center justify-between text-sm text-muted">
               <span>
                 {total.toLocaleString()} questions · page {page} of {pages}

@@ -261,6 +261,23 @@ Inactive** and press **Activate** on the ones you want in tests. Exercises with
 figures, several parts, non-numeric answers or missing context are skipped;
 `report.json` lists what was skipped and why.
 
+### Reviewing many questions
+
+In **Question bank**, filter by **Source** (College Board, OpenStax, AGIEval,
+samples…), status, skill, difficulty or text, then either:
+
+* **Bulk actions**: tick rows (or the header box, then **Select all N
+  matching** to cover every page) and **Activate**, **Deactivate** or
+  **Delete**. Delete keeps questions already used in a test.
+* **Review these**: one question at a time, rendered as students see it with
+  the answer marked. Keys: **A** activate, **S** skip (stays inactive),
+  **D** delete, **1/2/3** set difficulty, **E** open the full editor. Skill and
+  difficulty corrections are saved with the decision; the next question is
+  preloaded, so it's a keypress per question.
+
+A practical order: activate whole sources you trust in bulk (e.g. AGIEval,
+which is official SAT material), then review the rest by skill.
+
 ### Checking and repairing imported questions
 
 ```bash
