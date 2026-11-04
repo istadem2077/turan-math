@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/auth";
-import { Card, Empty, LinkButton, PageHeader, Select, Input, Button, Table } from "@/components/ui";
+import { Card, LinkButton, PageHeader, Select, Input, Button, Table } from "@/components/ui";
 import { DIFFICULTIES, DIFFICULTY_LABEL, DOMAINS, DOMAIN_LABEL, DOMAIN_SHORT } from "@/lib/taxonomy";
 import { SOURCE_LABEL, cleanFilters, filterQuery, questionWhere } from "@/lib/question-filters";
 import { QuestionTable } from "./QuestionTable";
@@ -154,10 +154,8 @@ export default async function QuestionsPage({
           </div>
         </form>
 
-        {rows.length === 0 ? (
-          <Empty>No questions match.</Empty>
-        ) : (
-          <>
+        {/* The table stays mounted when empty, so a bulk action that empties the filter still shows its result. */}
+        <>
             {isAdmin && total > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm">
                 <span className="text-muted">
@@ -208,8 +206,7 @@ export default async function QuestionsPage({
                 )}
               </div>
             </div>
-          </>
-        )}
+        </>
       </div>
     </>
   );

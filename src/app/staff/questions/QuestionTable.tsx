@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Badge, Button, Notice, Table } from "@/components/ui";
+import { Badge, Button, Empty, Notice, Table } from "@/components/ui";
 import { bulkQuestions, type BulkTarget } from "../actions";
 import type { QuestionFilters } from "@/lib/question-filters";
 
@@ -65,6 +65,9 @@ export function QuestionTable({ rows, total, filters, canEdit }: { rows: Row[]; 
       )}
       {result?.message && <Notice tone="ok">{result.message}</Notice>}
       {result?.error && <Notice tone="bad">{result.error}</Notice>}
+      {rows.length === 0 ? (
+        <Empty>No questions match.</Empty>
+      ) : (
       <Table>
         <thead>
           <tr>
@@ -115,6 +118,7 @@ export function QuestionTable({ rows, total, filters, canEdit }: { rows: Row[]; 
           ))}
         </tbody>
       </Table>
+      )}
     </div>
   );
 }
