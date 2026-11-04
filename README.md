@@ -66,10 +66,41 @@ The dev server also creates the skill taxonomy and admin account on start
 
 | Script | Purpose |
 |---|---|
-| `npm test` | Unit tests (blueprint selection, grading) |
+| `npm test` | Unit tests (blueprint selection, grading, question import conversion) |
+| `npm run test:e2e` | End-to-end browser tests (Playwright); run `npm run build` first. See below |
 | `npm run lint` | Type-check |
 | `npm run db:migrate:dev -- --name <change>` | Create a new migration after editing `prisma/schema.prisma` |
 | `npx tsx scripts/import-questions.ts file.json` | Bulk-import a very large question file from the CLI |
+
+## End-to-end tests
+
+`e2e/` holds Playwright tests that drive the real app in Chromium: sign-in and
+access rules, the full quiz flow (create → start → lobby → take both modules →
+release results → student sees results, plus scheduling/cancelling), and
+homework (assign with an attachment, wrong-format rejection, hand-in, grading
+with a response file, reopening, due-date closing, file privacy).
+
+They run against a production build on port 3200 and their **own database**,
+`turan_math_e2e` by default. Setup creates it if needed, applies migrations and
+seeds it, but never deletes anything. The database name must contain "e2e" or
+"test", which keeps the tests away from real data.
+
+```bash
+docker compose up -d db              # or any PostgreSQL; the default URL matches docker-compose
+npm run build
+npx playwright install chromium      # first time only
+npm run test:e2e
+npx playwright show-report           # HTML report: traces, screenshots, videos of failures
+```
+
+To use a different server, set `E2E_DATABASE_URL`, e.g.
+`postgresql://user:pass@localhost:5432/turan_math_e2e`.
+
+**GitHub Actions** (`.github/workflows/ci.yml`) runs on every push: type-check
+and unit tests, then the end-to-end suite against a fresh PostgreSQL. When a
+run fails, download the `playwright-report` artifact from the run page and open
+`playwright-report/index.html`; failed tests include a trace you can step
+through.
 
 ## Roles
 
