@@ -18,7 +18,7 @@
  */
 import { join } from "node:path";
 import { missingContext } from "../../src/lib/question-checks";
-import { arg, fetchCached, flag, writeOutput, type OutRow } from "./common";
+import { arg, brokenMath, fetchCached, flag, writeOutput, type OutRow } from "./common";
 
 const URL = "https://raw.githubusercontent.com/ruixiangcui/AGIEval/main/data/v1_1/sat-math.jsonl";
 const OUT = arg("out") ?? "data/agieval";
@@ -82,7 +82,13 @@ async function main() {
     if (NEEDS_FIGURE.test(stem)) return void skipped.push({ index: i, reason: "needs a figure or table that isn't in the data" });
     const missing = missingContext(stem);
     if (missing) return void skipped.push({ index: i, reason: missing });
+    if (/\\begin\{(tabular|itemize|enumerate|center)\}/.test(stem + it.options.join(" ")))
+      return void skipped.push({ index: i, reason: "uses LaTeX layout (tabular/itemize) the app can't display" });
     if (it.options?.length !== 4 || !/^[A-D]$/.test(it.label)) return void skipped.push({ index: i, reason: "not a 4-choice question" });
+    const choices = it.options.map(clean);
+    if (brokenMath(money(stem)) || choices.some(brokenMath)) return void skipped.push({ index: i, reason: "broken LaTeX in the question or choices" });
+    // Some worked solutions have broken LaTeX in the source data; keep the question, drop the solution.
+    const solution = money(it.other?.solution ?? "").trim();
     const text = stem + " " + it.options.join(" ");
     const skill = RULES.find(([re]) => re.test(text))?.[1] ?? "LIN_EQ_1VAR";
     rows.push({
@@ -93,17 +99,17 @@ async function main() {
       type: "MCQ",
       // The data glues display math to the next sentence ("$$...$$What is…").
       stem: money(stem).replace(/\$\$([^$]+)\$\$/g, "\n\n$$$$$1$$$$\n\n").replace(/\n{3,}/g, "\n\n").trim(),
-      choices: Object.fromEntries(it.options.map((o, k) => ["ABCD"[k], clean(o)])),
+      choices: Object.fromEntries(choices.map((o, k) => ["ABCD"[k], o])),
       answer: it.label,
       explanation:
-        `${money(it.other?.solution ?? "").trim()}\n\n` +
+        (solution && !brokenMath(solution) ? `${solution}\n\n` : "") +
         `*Source: official SAT practice test (College Board), via the AGIEval benchmark (Microsoft, arXiv:2304.06364).*`,
       active: false,
     });
   });
 
   writeOutput(OUT, rows, { total: items.length, kept: rows.length, skipped });
-  console.log(`  skipped ${skipped.length} (figures/tables missing from the data)`);
+  console.log(`  skipped ${skipped.length} (reasons in report.json; mostly figures missing from the data)`);
 }
 
 main().catch((e) => {

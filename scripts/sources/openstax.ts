@@ -166,7 +166,8 @@ function singular(instruction: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const NON_NUMERIC_TASK = /determine whether|graph|explain|write (an?|the)|translate|estimate|round|identify|name the|list|sketch|describe|which of|true or false|in words|interval notation|set-builder|plot|fill in|missing|_{3,}|\\_\\_/i;
+// "approximate"/"decimal places": the book's answer often has a different precision than asked.
+const NON_NUMERIC_TASK = /determine whether|graph|explain|write (an?|the)|translate|estimate|round|approximat|decimal places|identify|name the|list|sketch|describe|which of|true or false|in words|interval notation|set-builder|plot|fill in|missing|_{3,}|\\_\\_/i;
 
 // ---------------------------------------------------------------- main
 

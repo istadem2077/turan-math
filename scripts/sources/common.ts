@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isValidSprInput } from "../../src/lib/grading";
+import { fixDollarsInMath } from "../cbqb/convert";
 
 export type OutRow = {
   externalId: string;
@@ -105,8 +106,47 @@ export function numericAnswer(raw: string): string | null {
   return isValidSprInput(value) ? value : null;
 }
 
+/**
+ * True when Markdown has broken math: LaTeX commands outside any $…$ span, or
+ * an unmatched "$" (escaped currency "\$" is fine).
+ */
+export function brokenMath(md: string): boolean {
+  let i = 0;
+  while (i < md.length) {
+    const c = md[i];
+    if (c === "\\") {
+      if (md[i + 1] === "$") i += 2; // escaped currency
+      else if (/^\\[a-zA-Z]{2,}/.test(md.slice(i))) return true; // command outside math
+      else i += 2;
+      continue;
+    }
+    if (c !== "$") {
+      i++;
+      continue;
+    }
+    const delim = md.startsWith("$$", i) ? "$$" : "$";
+    let j = i + delim.length;
+    while (j < md.length && !md.startsWith(delim, j)) j += md[j] === "\\" ? 2 : 1;
+    if (j >= md.length) return true; // unmatched "$"
+    i = j + delim.length;
+  }
+  return false;
+}
+
 export function writeOutput(outDir: string, rows: OutRow[], report: Record<string, unknown>) {
+  rows = [...rows];
   mkdirSync(outDir, { recursive: true });
+  for (const r of rows) {
+    r.stem = fixDollarsInMath(r.stem);
+    if (r.explanation) r.explanation = fixDollarsInMath(r.explanation);
+    if (r.choices) for (const k of Object.keys(r.choices)) r.choices[k] = fixDollarsInMath(r.choices[k]);
+  }
+  // Last guard: never write a question whose math would display broken.
+  const broken = rows.filter((r) => brokenMath(r.stem) || Object.values(r.choices ?? {}).some(brokenMath));
+  if (broken.length) {
+    console.log(`  dropped ${broken.length} with broken math: ${broken.map((r) => r.externalId).join(", ")}`);
+    rows = rows.filter((r) => !broken.includes(r));
+  }
   rows.sort((a, b) => a.externalId.localeCompare(b.externalId));
   writeFileSync(join(outDir, "questions.json"), JSON.stringify(rows, null, 2));
   writeFileSync(join(outDir, "report.json"), JSON.stringify({ generatedAt: new Date().toISOString(), ...report }, null, 2));

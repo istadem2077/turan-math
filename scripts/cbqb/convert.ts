@@ -127,6 +127,8 @@ export function htmlToMarkdown(html: string | null | undefined, figBase: string)
   // 4. Restore placeholders
   md = md.replace(PH_RE, (_, kind: string, i: string) => (kind === "M" ? maths[+i] : figRefs[+i]));
 
+  md = fixDollarsInMath(md);
+
   // Tidy whitespace left by display math / figures.
   md = md
     .replace(/[ \t]+\n/g, "\n")
@@ -134,6 +136,49 @@ export function htmlToMarkdown(html: string | null | undefined, figBase: string)
     .trim();
 
   return { markdown: md, figures };
+}
+
+/**
+ * Rewrites "\$" inside math spans ("$\$ 4500$") as \text{\textdollar}: the
+ * Markdown math parser ends a span at any "$", even an escaped one, which
+ * breaks the formula. Escaped dollars in normal text ("costs \$12") stay.
+ */
+export function fixDollarsInMath(md: string): string {
+  let out = "";
+  let i = 0;
+  while (i < md.length) {
+    const c = md[i];
+    if (c === "\\") {
+      out += md.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c !== "$") {
+      out += c;
+      i++;
+      continue;
+    }
+    const delim = md.startsWith("$$", i) ? "$$" : "$";
+    let j = i + delim.length;
+    let inner = "";
+    let closed = false;
+    while (j < md.length) {
+      if (md[j] === "\\") {
+        inner += md[j + 1] === "$" ? String.raw`\text{\textdollar}` : md.slice(j, j + 2);
+        j += 2;
+      } else if (md.startsWith(delim, j)) {
+        closed = true;
+        break;
+      } else inner += md[j++];
+    }
+    if (!closed) {
+      out += md.slice(i);
+      break;
+    }
+    out += delim + inner + delim;
+    i = j + delim.length;
+  }
+  return out;
 }
 
 /** Remote <img> URLs left in the Markdown (not downloaded). */
