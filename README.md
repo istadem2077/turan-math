@@ -47,7 +47,7 @@ docker compose down -v                # stop and DELETE all data
 Bulk-import a large question file into the running stack (uses your local Node.js against the published DB port):
 
 ```bash
-DATABASE_URL=postgresql://turan:turan@localhost:5432/turan_math npx tsx scripts/import-questions.ts questions.json
+DATABASE_URL=postgresql://turan:turan@localhost:5432/turan_math npm run questions:import -- questions.json
 ```
 
 ## Local development
@@ -70,7 +70,7 @@ The dev server also creates the skill taxonomy and admin account on start
 | `npm run test:e2e` | End-to-end browser tests (Playwright); run `npm run build` first. See below |
 | `npm run lint` | Type-check |
 | `npm run db:migrate:dev -- --name <change>` | Create a new migration after editing `prisma/schema.prisma` |
-| `npx tsx scripts/import-questions.ts file.json` | Bulk-import a very large question file from the CLI |
+| `npm run questions:import -- file.json` | Bulk-import a very large question file from the CLI |
 
 ## End-to-end tests
 
@@ -234,7 +234,7 @@ machine; the output goes to `data/` (git-ignored, College Board content):
 ```bash
 npm run cbqb:scrape -- --limit 20      # test run; add --probe to inspect the raw API
 npm run cbqb:scrape                    # everything (cached in data/cbqb/raw, re-runs resume)
-npx tsx scripts/import-questions.ts data/cbqb/questions.json --figures data/cbqb/figures
+npm run questions:import -- data/cbqb/questions.json --figures data/cbqb/figures
 ```
 
 The question bank has no public API contract; if it changes, `--probe` shows
@@ -251,6 +251,10 @@ container up; see "Importing from the College Board" above):
 npm run questions:rebuild -- --yes                        # solvable questions only
 npm run questions:rebuild -- --yes --include-unsolvable   # also unsolvable ones, inactive + flagged
 ```
+
+The `npm run questions:*` commands first apply any pending database updates
+(the same step the app runs when its container starts), so they work right
+after a `git pull` even before the app is rebuilt.
 
 Options: `--offline` (use the scrapers' download caches; fast, no new
 questions), `--skip cbqb` (leave a source out, e.g. if College Board is
@@ -280,8 +284,8 @@ succeeded.
 ```bash
 npx tsx scripts/sources/openstax.ts        # → data/openstax/questions.json (+ report.json)
 npx tsx scripts/sources/agieval.ts         # → data/agieval/questions.json
-npx tsx scripts/import-questions.ts data/openstax/questions.json
-npx tsx scripts/import-questions.ts data/agieval/questions.json
+npm run questions:import -- data/openstax/questions.json
+npm run questions:import -- data/agieval/questions.json
 ```
 
 Solvable questions are written as active; unsolvable ones (needing a figure
@@ -322,14 +326,14 @@ which is official SAT material), then review the rest by skill.
 Questions created by hand get the externalId `local:<id>` in the export, so
 importing the same file twice never duplicates them. The upload limit is
 50 MB; for bigger banks export one source at a time, or use the CLI:
-`npx tsx scripts/import-questions.ts questions.json --update --with-status`.
+`npm run questions:import -- questions.json --update --with-status`.
 
 ### Checking and repairing imported questions
 
 ```bash
-npx tsx scripts/check-questions.ts                    # list questions that refer to a missing definition/figure/table
-npx tsx scripts/check-questions.ts --deactivate       # and take them out of rotation
-npx tsx scripts/import-questions.ts <file> --update   # replace changed questions with a re-scraped version
+npm run questions:check                    # list questions that refer to a missing definition/figure/table
+npm run questions:check -- --deactivate       # and take them out of rotation
+npm run questions:import -- <file> --update   # replace changed questions with a re-scraped version
 ```
 
 `--update` replaces text, choices, answer key, skill and difficulty of

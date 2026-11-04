@@ -5,6 +5,7 @@
  *   3. import the solvable ones as active
  *
  *   npm run questions:rebuild -- --yes [--include-unsolvable] [--offline] [--skip cbqb,openstax,agieval]
+ * (the npm script first brings the database up to date with pending migrations)
  *
  *   --include-unsolvable  also import unsolvable questions: inactive, with the
  *                         reason shown in review mode (Status: Flagged)

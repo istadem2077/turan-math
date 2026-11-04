@@ -1,6 +1,8 @@
 /**
  * CLI bulk import (same as Question bank → Import, for very large files):
- *   npx tsx scripts/import-questions.ts <file.json|csv> [--figures <dir>] [--include-unsolvable] [--update] [--with-status]
+ *   npm run questions:import -- <file.json|csv> [--figures <dir>] [--include-unsolvable] [--update] [--with-status]
+ * (the npm script first applies pending database migrations; running this file
+ * directly with tsx skips that step)
  *
  * Rows the scrapers marked "unsolvable" are skipped unless --include-unsolvable
  * is given: then they come in inactive, with the reason as their review note
@@ -52,7 +54,13 @@ async function main() {
 main()
   .then(() => db.$disconnect())
   .catch(async (e) => {
-    console.error(e);
+    // P2022 / unknown field: the database (or the local Prisma client) is older than this code.
+    const code = (e as { code?: string }).code;
+    if (code === "P2022" || code === "P2021" || /Unknown argument|does not exist in the current database/.test(String(e)))
+      console.error(
+        "The database is missing recent updates. Run `npm run db:prepare` (or use `npm run questions:import`, which does it for you), then import again.",
+      );
+    else console.error(e);
     await db.$disconnect();
     process.exit(1);
   });
