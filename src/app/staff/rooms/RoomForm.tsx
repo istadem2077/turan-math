@@ -1,5 +1,5 @@
 "use client";
-import { useActionState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Input, Notice } from "@/components/ui";
 import type { ActionResult } from "../actions";
 
@@ -12,9 +12,9 @@ export function RoomForm({
   initial: { name: string; description: string };
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   return (
-    <form action={formAction} className="space-y-5">
+    <form onSubmit={onSubmit} className="space-y-5">
       <Field label="Room name">
         <Input name="name" defaultValue={initial.name} required maxLength={120} placeholder="e.g. Group A — Monday/Wednesday" />
       </Field>

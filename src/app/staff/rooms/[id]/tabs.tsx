@@ -3,13 +3,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "@/components/ui";
 
-export function RoomTabs({ roomId, counts }: { roomId: string; counts: { students: number; quizzes: number; homework: number } }) {
+export function RoomTabs({ roomId, counts }: { roomId: string; counts: { students: number; quizzes: number; homework: number; materials: number } }) {
   const path = usePathname();
   const base = `/staff/rooms/${roomId}`;
   const tabs = [
     { href: base, label: "Students", count: counts.students, exact: true },
     { href: `${base}/quizzes`, label: "Quizzes", count: counts.quizzes },
     { href: `${base}/homework`, label: "Homework", count: counts.homework },
+    { href: `${base}/materials`, label: "Materials", count: counts.materials },
     { href: `${base}/settings`, label: "Settings" },
   ];
   return (

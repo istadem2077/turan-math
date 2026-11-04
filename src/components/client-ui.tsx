@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Input, Notice, cx } from "./ui";
 import type { ActionResult } from "@/app/staff/actions";
 
@@ -31,10 +32,13 @@ export function ActionButton({
           setError(undefined);
           start(async () => {
             try {
-              await action();
+              const result = await action();
+              // Actions report refusals as { error } (thrown messages are hidden in production).
+              if (result && typeof result === "object" && "error" in result && typeof result.error === "string") setError(result.error);
             } catch (e) {
               if (e && typeof e === "object" && "digest" in e && String((e as { digest: string }).digest).startsWith("NEXT_REDIRECT")) throw e;
-              setError(e instanceof Error ? e.message : "Failed");
+              const msg = e instanceof Error ? e.message : "";
+              setError(!msg || msg.includes("production builds") ? "Something went wrong. Please try again." : msg);
             }
           });
         }}
@@ -74,10 +78,10 @@ export function CreateUserForm({
   noun: string;
   rooms?: { id: string; name: string }[];
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   return (
     <div className="space-y-4">
-      <form action={formAction} className="grid gap-4 md:grid-cols-2" key={state?.ok ? state.username : "form"}>
+      <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2" key={state?.ok ? state.username : "form"}>
         <Field label="Full name">
           <Input name="fullName" required maxLength={100} />
         </Field>

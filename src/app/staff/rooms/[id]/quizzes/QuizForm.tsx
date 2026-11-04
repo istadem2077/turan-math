@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { Button, Field, Input, Notice, Select } from "@/components/ui";
 import { DateTimeInput } from "@/components/LocalTime";
 import { Toggle } from "@/components/client-ui";
@@ -30,10 +31,10 @@ export function QuizForm({
   /** New quiz: offer the optional schedule. */
   withSchedule?: boolean;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, onSubmit, pending] = useActionForm(action);
   const [schedule, setSchedule] = useState(false);
   return (
-    <form action={formAction} className="space-y-5">
+    <form onSubmit={onSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Title">
           <Input name="title" defaultValue={initial.title} required maxLength={120} placeholder="e.g. Quiz 3 — Linear functions" />

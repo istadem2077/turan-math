@@ -1,10 +1,10 @@
 "use client";
-import { useActionState } from "react";
+import { useActionForm } from "@/components/use-action-form";
 import { login } from "./actions";
 import { Button, Field, Input } from "@/components/ui";
 
 export default function LoginPage() {
-  const [state, action, pending] = useActionState(login, undefined);
+  const [state, onSubmit, pending] = useActionForm(login);
   return (
     <main className="grid min-h-screen place-items-center bg-navy px-4">
       <div className="w-full max-w-sm">
@@ -13,7 +13,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold">Turan Math</h1>
           <p className="mt-1 text-sm text-white/70">SAT Math practice testing</p>
         </div>
-        <form action={action} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+        <form onSubmit={onSubmit} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
           <Field label="Username">
             <Input name="username" autoComplete="username" autoCapitalize="none" required autoFocus />
           </Field>

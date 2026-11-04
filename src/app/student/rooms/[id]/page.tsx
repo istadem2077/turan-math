@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStudent } from "@/lib/auth";
 import { Empty } from "@/components/ui";
+import { MaterialCard } from "@/components/MaterialCard";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { StudentShell } from "../../Shell";
 import { ActiveQuizCard, HomeworkRow, PastQuizCard, splitQuizzes } from "../../items";
@@ -52,6 +53,14 @@ export default async function StudentRoomPage({ params }: { params: Promise<{ id
             ))}
           </>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-muted uppercase">Lecture materials</h2>
+        {room.materials.length === 0 && <Empty>No materials posted yet.</Empty>}
+        {room.materials.map((m) => (
+          <MaterialCard key={m.id} m={m} />
+        ))}
       </section>
 
       {past.length > 0 && (

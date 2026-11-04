@@ -153,7 +153,7 @@ export async function saveManualTest(title: string, modules: string[][]): Promis
 export async function deleteTest(testId: string) {
   await requireStaff();
   const used = await db.quiz.count({ where: { testId } });
-  if (used) throw new Error("This test is assigned to a quiz.");
+  if (used) return { error: "This test is assigned to a quiz, so it can't be deleted." };
   await db.test.delete({ where: { id: testId } });
   redirect("/staff/tests");
 }

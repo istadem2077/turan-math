@@ -107,8 +107,8 @@ through.
 | Role | Can |
 |---|---|
 | **Admin** | Everything a professor can, plus: manage professors, create/edit/retire/import questions |
-| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, create/start/schedule quizzes and monitor them live, release results, assign and grade homework |
-| **Student** | See only the rooms they are assigned to and the quizzes and homework in them; take quizzes; hand in homework; see quiz results once released and homework grades/responses once given |
+| **Professor** | Create students, create rooms, assign/move students between rooms, generate or hand-build tests, create/start/schedule quizzes and monitor them live, release results, assign and grade homework, post lecture materials |
+| **Student** | See only the rooms they are assigned to and the quizzes, homework and lecture materials in them; take quizzes; hand in homework; see quiz results once released and homework grades/responses once given |
 
 Students never see other students, other rooms, other students' submissions, or
 answer keys. Every page, server action and file download re-checks the session
@@ -117,7 +117,12 @@ role and room membership on the server.
 ## Rooms, quizzes and homework
 
 A **room** is a classroom (a group of students); its page has tabs for
-Students, Quizzes, Homework and Settings.
+Students, Quizzes, Homework, Materials and Settings.
+
+**Materials** are lecture slides and documents (PDF, PowerPoint, Word, also
+OpenDocument; up to 40 MB per file), a link (Google Slides, a video, a shared
+folder), or both, with an optional description. Students in the room see them
+on their room page; PDFs open in the browser, other files download.
 
 **Quizzes** have no fixed time. A new quiz waits until the professor presses
 **Start quiz**: students in the room see it immediately and get **5 minutes**
@@ -181,8 +186,9 @@ User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem 
                          │        │
                          │        └──< Attempt ──< Response >── TestItem
                          │
+                         ├──< Material (files and/or a link)
                          └──< Homework ──< HomeworkSubmission
-                                 └──── StoredFile ────┘
+                                 └──── StoredFile ────┘  (also holds material files)
 ```
 
 | Table | Notes |
@@ -200,7 +206,8 @@ User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem 
 | `Response` | One per (attempt, item): `answer`, `markedForReview`, `eliminated[]`, `isCorrect` (set at grading) |
 | `Homework` | Per room: `title`, `instructions`, `dueAt`, `allowedFormats[]` (extensions; empty = any), `maxPoints`, `allowLate` |
 | `HomeworkSubmission` | One per (homework, student): `note`, `submittedAt`, `late`, `score`, `feedback`, `gradedAt`, `reopened` |
-| `StoredFile` | Uploaded homework files (bytea): assignment attachments, student files, or files in the professor's response |
+| `Material` | Per room: `title`, `description`, optional `url`, and files |
+| `StoredFile` | Uploaded files (bytea): homework attachments, student hand-ins, files in the professor's response, lecture materials |
 
 ## Question bank
 

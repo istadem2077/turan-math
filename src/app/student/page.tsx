@@ -47,7 +47,8 @@ export default async function StudentHome() {
             <Link key={r.id} href={`/student/rooms/${r.id}`} className="rounded-xl border border-line bg-white p-5 transition duration-150 hover:-translate-y-0.5 hover:border-brand hover:shadow-md hover:shadow-brand/5">
               <div className="text-lg font-semibold">{r.name}</div>
               <div className="mt-1 text-sm text-muted">
-                {r.quizzes.length} quiz{r.quizzes.length === 1 ? "" : "zes"} · {r.homeworks.length} homework
+                {r.quizzes.length} quiz{r.quizzes.length === 1 ? "" : "zes"} · {r.homeworks.length} homework · {r.materials.length} material
+                {r.materials.length === 1 ? "" : "s"}
               </div>
               <div className="mt-2 text-xs font-semibold text-brand">Open room →</div>
             </Link>

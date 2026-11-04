@@ -10,6 +10,11 @@ export const FORMAT_PRESETS: { key: string; label: string; exts: string[] }[] = 
   { key: "zip", label: "ZIP archive", exts: ["zip"] },
 ];
 
+/** Lecture materials: slides and documents. */
+export const MATERIAL_FORMATS = ["pdf", "ppt", "pptx", "pps", "ppsx", "doc", "docx", "odp", "odt"];
+/** Slides with images get big; still under the 50 MB form limit in next.config.ts. */
+export const MATERIAL_MAX_FILE_BYTES = 40 * 1024 * 1024;
+
 export const MAX_FILE_BYTES = 15 * 1024 * 1024;
 export const MAX_FILES_PER_UPLOAD = 10;
 export const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
@@ -63,6 +68,10 @@ const MIME: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ppt: "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  pps: "application/vnd.ms-powerpoint",
+  ppsx: "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  odt: "application/vnd.oasis.opendocument.text",
   zip: "application/zip",
 };
 export const mimeFor = (filename: string) => MIME[extOf(filename)] ?? "application/octet-stream";

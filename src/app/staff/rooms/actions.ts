@@ -7,7 +7,7 @@ import { requireStaff } from "@/lib/auth";
 import { errorText } from "@/lib/errors";
 import { DEFAULT_MODULE_MINUTES } from "@/lib/blueprint";
 import { LOBBY_MINUTES } from "@/lib/timing";
-import { FORMAT_PRESETS, parseExtensions } from "@/lib/file-formats";
+import { FORMAT_PRESETS, MATERIAL_FORMATS, MATERIAL_MAX_FILE_BYTES, parseExtensions } from "@/lib/file-formats";
 import { checkFiles, formFiles, toFileRows } from "@/lib/files";
 import type { ActionResult } from "../actions";
 
@@ -118,13 +118,16 @@ export async function updateQuiz(quizId: string, _: ActionResult | undefined, fo
   }
 }
 
+// Actions run from buttons return { error } instead of throwing: Next.js hides
+// thrown error messages in production builds.
+
 /** Opens the lobby now; module 1 begins for everyone LOBBY_MINUTES later. */
 export async function startQuiz(quizId: string) {
   await requireStaff();
   const quiz = await loadQuiz(quizId);
-  if (!quiz.testId) throw new Error("Choose a test for this quiz first.");
+  if (!quiz.testId) return { error: "Choose a test for this quiz first." };
   const startsAt = new Date(Date.now() + LOBBY_MINUTES * 60_000);
-  if (quiz.startsAt && quiz.startsAt <= startsAt) throw new Error("This quiz has already started.");
+  if (quiz.startsAt && quiz.startsAt <= startsAt) return { error: "This quiz has already started." };
   await db.quiz.update({ where: { id: quizId }, data: { startsAt } });
   revalidateQuiz(quiz);
 }
@@ -148,7 +151,7 @@ export async function scheduleQuiz(quizId: string, _: ActionResult | undefined, 
 export async function cancelQuizStart(quizId: string) {
   await requireStaff();
   const quiz = await loadQuiz(quizId);
-  if (quiz._count.attempts > 0 || (quiz.startsAt && quiz.startsAt <= new Date())) throw new Error("This quiz has already started.");
+  if (quiz._count.attempts > 0 || (quiz.startsAt && quiz.startsAt <= new Date())) return { error: "This quiz has already started." };
   await db.quiz.update({ where: { id: quizId }, data: { startsAt: null } });
   revalidateQuiz(quiz);
 }
@@ -239,16 +242,24 @@ export async function deleteHomework(homeworkId: string) {
   redirect(`${roomPath(hw.roomId)}/homework`);
 }
 
-/** Removes a file the professor attached (to an assignment or a response). */
+/** Removes a file the professor attached (to an assignment, a response or a lecture material). */
 export async function deleteStaffFile(fileId: string) {
   await requireStaff();
   const file = await db.storedFile.findUniqueOrThrow({
     where: { id: fileId },
-    include: { homework: true, feedbackSubmission: { include: { homework: true } } },
+    include: { homework: true, feedbackSubmission: { include: { homework: true } }, material: true },
   });
+  if (file.material) {
+    const left = await db.storedFile.count({ where: { materialId: file.material.id } });
+    if (!file.material.url && left <= 1)
+      return { error: "This is the only file and there's no link. Add a link or another file first, or delete the material." };
+    await db.storedFile.delete({ where: { id: fileId } });
+    revalidatePath(roomPath(file.material.roomId), "layout");
+    return;
+  }
   // Student-uploaded files are only replaced by the student re-submitting.
   const hw = file.homework ?? file.feedbackSubmission?.homework;
-  if (!hw) throw new Error("Only your own attachments can be removed.");
+  if (!hw) return { error: "Only your own attachments can be removed." };
   await db.storedFile.delete({ where: { id: fileId } });
   revalidatePath(`${roomPath(hw.roomId)}/homework/${hw.id}`, "layout");
 }
@@ -287,4 +298,67 @@ export async function reopenSubmission(submissionId: string) {
     include: { homework: true },
   });
   revalidatePath(`${roomPath(sub.homework.roomId)}/homework/${sub.homeworkId}`, "layout");
+}
+
+// ───────────────────────── Lecture materials ─────────────────────────
+
+const MaterialForm = z.object({
+  title: z.string().trim().min(1, "Title is required").max(160),
+  description: z.string().trim().max(20_000),
+  url: z
+    .string()
+    .trim()
+    .max(2000)
+    .refine((v) => v === "" || /^https?:\/\/[^\s]+\.[^\s]+/i.test(v), "The link must start with http:// or https://")
+    .transform((v) => v || null),
+});
+
+function readMaterialForm(form: FormData) {
+  return MaterialForm.parse({
+    title: form.get("title"),
+    description: form.get("description") ?? "",
+    url: form.get("url") ?? "",
+  });
+}
+
+export async function createMaterial(roomId: string, _: ActionResult | undefined, form: FormData): Promise<ActionResult> {
+  const me = await requireStaff();
+  try {
+    const data = readMaterialForm(form);
+    const files = formFiles(form, "files");
+    if (!data.url && files.length === 0) return { error: "Attach at least one file or add a link." };
+    checkFiles(files, MATERIAL_FORMATS, MATERIAL_MAX_FILE_BYTES);
+    await db.$transaction(async (tx) => {
+      const m = await tx.material.create({ data: { ...data, roomId, createdById: me.id } });
+      if (files.length) await tx.storedFile.createMany({ data: await toFileRows(files, { materialId: m.id }, me.id) });
+    });
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+  revalidatePath(roomPath(roomId), "layout");
+  redirect(`${roomPath(roomId)}/materials`);
+}
+
+export async function updateMaterial(materialId: string, _: ActionResult | undefined, form: FormData): Promise<ActionResult> {
+  const me = await requireStaff();
+  try {
+    const data = readMaterialForm(form);
+    const files = formFiles(form, "files");
+    checkFiles(files, MATERIAL_FORMATS, MATERIAL_MAX_FILE_BYTES);
+    const existing = await db.storedFile.count({ where: { materialId } });
+    if (!data.url && existing + files.length === 0) return { error: "Keep at least one file or a link." };
+    const m = await db.material.update({ where: { id: materialId }, data });
+    if (files.length) await db.storedFile.createMany({ data: await toFileRows(files, { materialId }, me.id) });
+    revalidatePath(roomPath(m.roomId), "layout");
+    return { ok: true, message: "Saved." };
+  } catch (e) {
+    return { error: errorText(e) };
+  }
+}
+
+export async function deleteMaterial(materialId: string) {
+  await requireStaff();
+  const m = await db.material.delete({ where: { id: materialId } });
+  revalidatePath(roomPath(m.roomId), "layout");
+  redirect(`${roomPath(m.roomId)}/materials`);
 }

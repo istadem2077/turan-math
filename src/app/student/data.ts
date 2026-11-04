@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { reconcileAttempt } from "@/lib/attempts";
+import { FILE_META } from "@/lib/files";
 import type { StudentHomework, StudentQuiz } from "./items";
 
 /** Everything a student sees, limited to the rooms they belong to (optionally one room). */
@@ -15,6 +16,7 @@ export async function loadStudentRooms(studentId: string, roomId?: string) {
         include: { attempts: { where: { studentId }, include: { quiz: true } } },
       },
       homeworks: { orderBy: { dueAt: "asc" }, include: { submissions: { where: { studentId } } } },
+      materials: { orderBy: { createdAt: "desc" }, include: { files: { select: FILE_META, orderBy: { createdAt: "asc" } } } },
     },
   });
   return Promise.all(
@@ -27,7 +29,7 @@ export async function loadStudentRooms(studentId: string, roomId?: string) {
         })),
       );
       const homeworks: StudentHomework[] = room.homeworks.map(({ submissions, ...h }) => ({ ...h, roomName: room.name, submission: submissions[0] ?? null }));
-      return { id: room.id, name: room.name, quizzes, homeworks };
+      return { id: room.id, name: room.name, quizzes, homeworks, materials: room.materials };
     }),
   );
 }
