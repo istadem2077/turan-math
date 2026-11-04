@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Noto Serif", Georgia, "Times New Roman", serif;
+
+  --color-ink: #1e1e1e;
+  --color-muted: #5b6270;
+  --color-line: #d9dce3;
+  --color-canvas: #f6f7f9;
+  --color-brand: #324dc7;
+  --color-brand-dark: #1d2f86;
+  --color-brand-soft: #e8ecfb;
+  --color-navy: #0f1f4b;
+  --color-ok: #16794c;
+  --color-ok-soft: #e3f4ea;
+  --color-warn: #a35c00;
+  --color-warn-soft: #fdf1df;
+  --color-bad: #b42318;
+  --color-bad-soft: #fde8e6;
+}
+
+html,
+body {
+  color: var(--color-ink);
+  background: var(--color-canvas);
+}
+
+/* Markdown content rendered from questions */
+.prose-q p {
+  margin: 0 0 0.75em;
+}
+.prose-q p:last-child {
+  margin-bottom: 0;
+}
+.prose-q ul {
+  list-style: disc;
+  padding-left: 1.4em;
+  margin: 0 0 0.75em;
+}
+.prose-q ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+  margin: 0 0 0.75em;
+}
+.prose-q li {
+  margin: 0.2em 0;
+}
+.prose-q img {
+  max-width: 100%;
+  margin: 0.5em auto;
+}
+.prose-q table {
+  border-collapse: collapse;
+  margin: 0.5em auto;
+}
+.prose-q th,
+.prose-q td {
+  border: 1px solid var(--color-line);
+  padding: 0.35em 0.75em;
+  text-align: center;
+}
+.prose-q .katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Bluebook-style dashed rule under the exam header */
+.bb-rule {
+  height: 3px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    #1d2f86 0 18px,
+    transparent 18px 22px,
+    #f2b233 22px 40px,
+    transparent 40px 44px,
+    #1e9c8f 44px 62px,
+    transparent 62px 66px,
+    #cf3b6d 66px 84px,
+    transparent 84px 88px
+  );
+}

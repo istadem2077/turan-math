@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+.env
+.env.local
+src/generated
+*.tsbuildinfo
+next-env.d.ts
+
+# scraped question data (College Board content, not for the repo)
+/data

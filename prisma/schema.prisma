@@ -1,0 +1,367 @@
+// Turan Math — database model (PostgreSQL)
+//
+// Overview
+//   User ──< RoomMember >── Room ──< Quiz ──> Test ──< TestItem >── Question >── Skill
+//                            │        │
+//                            │        └──< Attempt ──< Response >── TestItem
+//                            │
+//                            └──< Homework ──< HomeworkSubmission
+//                                    │               │
+//                                    └── StoredFile ─┘ (assignment, student and feedback files)
+//
+// * Users have exactly one role. ADMIN and PROFESSOR are staff; STUDENT
+//   accounts are created by staff and can only ever see rooms they belong to.
+// * A Room is a classroom: a group of students. Everything a student sees
+//   (quizzes, homework) belongs to one of their rooms.
+// * A Test is a fixed, ordered 44-question form (2 modules x 22). It is either
+//   generated from the Bluebook blueprint or hand-picked by a professor, and can
+//   be reused by several quizzes.
+// * A Quiz is one proctored sitting of a test in a room. The professor starts
+//   it by hand (students get a short lobby window to join) or schedules it;
+//   everyone starts module 1 at `startsAt`.
+// * An Attempt is one student's sitting of one quiz; a Response is their answer
+//   to one TestItem.
+// * Homework is assigned to a room with a due date and allowed file formats;
+//   each student hands in one submission, which the professor grades and
+//   answers.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  PROFESSOR
+  STUDENT
+}
+
+/// The four SAT Math content domains (College Board naming).
+enum Domain {
+  ALGEBRA
+  ADVANCED_MATH
+  PROBLEM_SOLVING_DATA_ANALYSIS
+  GEOMETRY_TRIGONOMETRY
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionType {
+  /// Multiple choice, four options A–D.
+  MCQ
+  /// Student-produced response (grid-in).
+  SPR
+}
+
+enum TestSource {
+  AUTO
+  MANUAL
+}
+
+enum AttemptStatus {
+  MODULE_1
+  MODULE_2
+  SUBMITTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdById  String?
+  createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[]  @relation("UserCreatedBy")
+
+  memberships       RoomMember[]
+  attempts          Attempt[]
+  roomsCreated      Room[]               @relation("RoomCreatedBy")
+  quizzesCreated    Quiz[]               @relation("QuizCreatedBy")
+  homeworksCreated  Homework[]           @relation("HomeworkCreatedBy")
+  submissions       HomeworkSubmission[] @relation("SubmissionStudent")
+  submissionsGraded HomeworkSubmission[] @relation("SubmissionGrader")
+  filesUploaded     StoredFile[]         @relation("FileUploadedBy")
+  testsCreated      Test[]               @relation("TestCreatedBy")
+  questionsCreated  Question[]           @relation("QuestionCreatedBy")
+
+  @@index([role])
+}
+
+/// SAT skill taxonomy (e.g. "Linear equations in one variable"). Seeded.
+model Skill {
+  id        Int        @id @default(autoincrement())
+  code      String     @unique
+  name      String
+  domain    Domain
+  sortOrder Int        @default(0)
+  questions Question[]
+
+  @@index([domain])
+}
+
+model Question {
+  id         String       @id @default(cuid())
+  /// Optional ID from the import source; makes re-imports idempotent.
+  externalId String?      @unique
+  domain     Domain
+  skillId    Int
+  skill      Skill        @relation(fields: [skillId], references: [id])
+  difficulty Difficulty
+  type       QuestionType
+
+  /// Markdown with $inline$ / $$display$$ LaTeX. Images via ![](url).
+  stem          String
+  /// MCQ only: [{ "key": "A", "text": "markdown" }, ...] (A–D).
+  choices       Json?
+  /// MCQ only: "A" | "B" | "C" | "D".
+  correctChoice String?
+  /// SPR only: every accepted answer, e.g. ["3/2", "1.5"]. Numeric
+  /// equivalents are also accepted at grading time.
+  sprAnswers    String[] @default([])
+  explanation   String?
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  testItems TestItem[]
+
+  // Random draws filter on these columns.
+  @@index([active, domain, difficulty, type])
+  @@index([skillId, difficulty])
+}
+
+/// Binary uploads (question figures). Served from /api/assets/:id.
+model Asset {
+  id        String   @id @default(cuid())
+  mimeType  String
+  filename  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model Test {
+  id          String     @id @default(cuid())
+  title       String
+  source      TestSource
+  createdAt   DateTime   @default(now())
+  createdById String?
+  createdBy   User?      @relation("TestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  items   TestItem[]
+  quizzes Quiz[]
+}
+
+model TestItem {
+  id         String   @id @default(cuid())
+  testId     String
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  /// 1 or 2
+  module     Int
+  /// 1..22 within the module
+  position   Int
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  responses Response[]
+
+  @@unique([testId, module, position])
+  @@unique([testId, questionId])
+}
+
+model Room {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("RoomCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  members   RoomMember[]
+  quizzes   Quiz[]
+  homeworks Homework[]
+}
+
+model RoomMember {
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@id([roomId, studentId])
+  @@index([studentId])
+}
+
+/// One sitting of a test in a room (a quiz or an exam).
+model Quiz {
+  id     String @id @default(cuid())
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  title  String
+
+  /// Module 1 opens for everyone at this instant. Null until the professor
+  /// starts the quiz (then: now + lobby window) or schedules it.
+  startsAt          DateTime?
+  /// Minutes per module (27 by default).
+  moduleMinutes     Int       @default(27)
+  calculatorAllowed Boolean   @default(true)
+  /// Students see nothing about their performance until this is true.
+  resultsReleased   Boolean   @default(false)
+
+  testId String?
+  test   Test?   @relation(fields: [testId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("QuizCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  attempts Attempt[]
+
+  @@index([roomId])
+  @@index([startsAt])
+}
+
+model Attempt {
+  id        String        @id @default(cuid())
+  quizId    String
+  quiz      Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status    AttemptStatus @default(MODULE_1)
+
+  module1StartedAt   DateTime  @default(now())
+  module1SubmittedAt DateTime?
+  module2StartedAt   DateTime?
+  module2SubmittedAt DateTime?
+
+  /// Filled in at submission.
+  rawScore    Int?
+  module1Raw  Int?
+  module2Raw  Int?
+  scaledScore Int?
+
+  responses Response[]
+
+  @@unique([quizId, studentId])
+  @@index([studentId])
+}
+
+model Homework {
+  id             String   @id @default(cuid())
+  roomId         String
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  title          String
+  /// Markdown with LaTeX, like question stems.
+  instructions   String   @default("")
+  dueAt          DateTime
+  /// Accepted file extensions, lowercase without the dot (e.g. ["pdf", "jpg"]).
+  /// Empty = any file type.
+  allowedFormats String[] @default([])
+  maxPoints      Int      @default(100)
+  /// When false, students can't submit after `dueAt`.
+  allowLate      Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("HomeworkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Files the professor attached to the assignment.
+  attachments StoredFile[]         @relation("HomeworkAttachments")
+  submissions HomeworkSubmission[]
+
+  @@index([roomId, dueAt])
+}
+
+/// One student's hand-in for one homework (re-submitting replaces it until it is graded).
+model HomeworkSubmission {
+  id          String   @id @default(cuid())
+  homeworkId  String
+  homework    Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User     @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  /// Optional note from the student.
+  note        String?
+  submittedAt DateTime @default(now())
+  late        Boolean  @default(false)
+  /// Set when the professor reopens it: the student may hand in again even after the due date.
+  reopened    Boolean  @default(false)
+
+  /// Grading. A graded submission is locked for the student.
+  score      Float?
+  /// The professor's response to the submission.
+  feedback   String?
+  gradedAt   DateTime?
+  gradedById String?
+  gradedBy   User?     @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  files         StoredFile[] @relation("SubmissionFiles")
+  feedbackFiles StoredFile[] @relation("SubmissionFeedbackFiles")
+
+  @@unique([homeworkId, studentId])
+  @@index([studentId])
+}
+
+/// Uploaded homework files (bytea). Served by /api/files/:id after an access
+/// check. Exactly one of the owner columns is set.
+model StoredFile {
+  id        String   @id @default(cuid())
+  filename  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  uploadedById String?
+  uploadedBy   User?   @relation("FileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  homeworkId           String?
+  homework             Homework?           @relation("HomeworkAttachments", fields: [homeworkId], references: [id], onDelete: Cascade)
+  submissionId         String?
+  submission           HomeworkSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id], onDelete: Cascade)
+  feedbackSubmissionId String?
+  feedbackSubmission   HomeworkSubmission? @relation("SubmissionFeedbackFiles", fields: [feedbackSubmissionId], references: [id], onDelete: Cascade)
+
+  @@index([homeworkId])
+  @@index([submissionId])
+  @@index([feedbackSubmissionId])
+}
+
+model Response {
+  id         String   @id @default(cuid())
+  attemptId  String
+  attempt    Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testItemId String
+  testItem   TestItem @relation(fields: [testItemId], references: [id], onDelete: Cascade)
+
+  /// "A".."D" for MCQ, the typed string for SPR. Null = unanswered.
+  answer          String?
+  markedForReview Boolean  @default(false)
+  /// MCQ choices the student crossed out (answer eliminator).
+  eliminated      String[] @default([])
+  /// Set at grading.
+  isCorrect       Boolean?
+  updatedAt       DateTime @updatedAt
+
+  @@unique([attemptId, testItemId])
+}
