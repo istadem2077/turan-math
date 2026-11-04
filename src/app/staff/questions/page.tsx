@@ -161,9 +161,20 @@ export default async function QuestionsPage({
             {isAdmin && total > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm">
                 <span className="text-muted">
-                  Go through these {total.toLocaleString()} one by one, with keyboard shortcuts: <b>A</b> activate, <b>S</b> skip, <b>D</b> delete.
+                  {total.toLocaleString()} questions match. Review them one by one (keys <b>A</b> activate, <b>S</b> skip, <b>D</b> delete), or export them
+                  to import on another site.
                 </span>
-                <LinkButton href={`/staff/questions/review?${filterQuery(filters)}`}>Review these</LinkButton>
+                <span className="flex gap-2">
+                  <a
+                    href={`/api/questions/export?${filterQuery(filters)}`}
+                    download
+                    className="inline-flex items-center rounded-lg border border-line bg-white px-3.5 py-2 text-sm font-semibold transition hover:bg-canvas"
+                    title="Download these questions as a file for Question bank → Import on another site"
+                  >
+                    Export these
+                  </a>
+                  <LinkButton href={`/staff/questions/review?${filterQuery(filters)}`}>Review these</LinkButton>
+                </span>
               </div>
             )}
             <QuestionTable

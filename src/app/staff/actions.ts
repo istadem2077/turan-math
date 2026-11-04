@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { generatePassword, hashPassword, requireAdmin, requireStaff } from "@/lib/auth";
 import { createTest, generateAutoTest } from "@/lib/tests";
 import { parseImportFile, toQuestionData } from "@/lib/question-import";
+import { importRows } from "@/lib/question-store";
 import { MCQ_KEYS } from "@/lib/taxonomy";
 import { Prisma } from "@/generated/prisma/client";
 import { errorText } from "@/lib/errors";
@@ -292,12 +293,10 @@ export async function importQuestions(_: unknown, form: FormData) {
     const rows = parseImportFile(file.name, await file.text());
     const skills = await db.skill.findMany();
     const { ok, errors } = toQuestionData(rows, skills);
-    let inserted = 0;
-    for (let i = 0; i < ok.length; i += 1000) {
-      inserted += (await db.question.createMany({ data: ok.slice(i, i + 1000), skipDuplicates: true })).count;
-    }
+    const update = form.get("update") === "on";
+    const r = await importRows(ok, { update, withStatus: update });
     revalidatePath("/staff/questions");
-    return { total: rows.length, valid: ok.length, inserted, duplicates: ok.length - inserted, errors: errors.slice(0, 200), errorCount: errors.length };
+    return { total: rows.length, valid: ok.length, ...r, errors: errors.slice(0, 200), errorCount: errors.length };
   } catch (e) {
     return { error: errorText(e) };
   }

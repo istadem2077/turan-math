@@ -278,6 +278,22 @@ samples…), status, skill, difficulty or text, then either:
 A practical order: activate whole sources you trust in bulk (e.g. AGIEval,
 which is official SAT material), then review the rest by skill.
 
+### Moving questions to another site (e.g. local → production)
+
+1. On the source site: **Question bank**, filter (e.g. Status: All, or one
+   Source), then **Export these**. The JSON file contains the questions, their
+   figures (embedded) and whether each is active, so your review work carries
+   over.
+2. On the target site: **Question bank → Import**, choose the file.
+   Questions that already exist (same externalId) are skipped; tick **Update
+   questions that already exist** when importing a newer export to apply your
+   edits and active/inactive changes.
+
+Questions created by hand get the externalId `local:<id>` in the export, so
+importing the same file twice never duplicates them. The upload limit is
+50 MB; for bigger banks export one source at a time, or use the CLI:
+`npx tsx scripts/import-questions.ts questions.json --update --with-status`.
+
 ### Checking and repairing imported questions
 
 ```bash
