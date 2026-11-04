@@ -31,7 +31,7 @@ export function SubmitForm({ homeworkId, formats, resubmit }: { homeworkId: stri
             className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
         </Field>
-        <Button disabled={pending}>{pending ? "Uploading…" : resubmit ? "Replace hand-in" : "Hand in"}</Button>
+        <Button pending={pending}>{resubmit ? "Replace hand-in" : "Hand in"}</Button>
       </form>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
       {state?.message && <Notice tone="ok">{state.message}</Notice>}

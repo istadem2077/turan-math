@@ -81,3 +81,104 @@ body {
     transparent 84px 88px
   );
 }
+
+/* ───────────── Motion ─────────────
+   Short and subtle; everything is disabled under prefers-reduced-motion. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* New page content (templates re-mount on navigation). */
+.anim-page {
+  animation: page-in 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+/* Form messages, credentials, freshly rendered values. */
+.anim-fade {
+  animation: fade-in 200ms ease-out both;
+}
+.spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Top navigation progress bar (see components/NavProgress.tsx). */
+.nav-progress {
+  position: fixed;
+  inset: 0 auto auto 0;
+  height: 3px;
+  z-index: 100;
+  background: var(--color-brand);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-brand) 60%, transparent);
+  pointer-events: none;
+  transform-origin: left;
+}
+/* Grows fast at first, then crawls while waiting for the server. */
+@keyframes nav-loading {
+  0% {
+    transform: scaleX(0);
+  }
+  10% {
+    transform: scaleX(0.35);
+  }
+  100% {
+    transform: scaleX(0.9);
+  }
+}
+@keyframes nav-done {
+  0% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+.nav-progress-loading {
+  width: 100%;
+  animation: nav-loading 10s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+.nav-progress-done {
+  width: 100%;
+  animation: nav-done 400ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .spinner {
+    animation: spin 1.5s linear infinite !important;
+  }
+}

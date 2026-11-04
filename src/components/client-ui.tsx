@@ -25,7 +25,7 @@ export function ActionButton({
         type="button"
         variant={variant}
         className={className}
-        disabled={pending}
+        pending={pending}
         onClick={() => {
           if (confirmText && !window.confirm(confirmText)) return;
           setError(undefined);
@@ -39,9 +39,9 @@ export function ActionButton({
           });
         }}
       >
-        {pending ? "Working…" : children}
+        {children}
       </Button>
-      {error && <span className="mt-1 text-xs text-bad">{error}</span>}
+      {error && <span className="anim-fade mt-1 text-xs text-bad">{error}</span>}
     </span>
   );
 }
@@ -51,7 +51,7 @@ export function Credentials({ username, password }: { username: string; password
   const text = `Username: ${username}\nPassword: ${password}`;
   const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-lg border border-ok/30 bg-ok-soft p-4 text-sm">
+    <div className="anim-fade rounded-lg border border-ok/30 bg-ok-soft p-4 text-sm">
       <p className="font-semibold text-ok">Share these credentials now. The password won't be shown again.</p>
       <pre className="mt-2 rounded bg-white px-3 py-2 font-mono text-ink">{text}</pre>
       <button
@@ -100,7 +100,7 @@ export function CreateUserForm({
           </Field>
         )}
         <div className="md:col-span-2">
-          <Button disabled={pending}>{pending ? "Creating…" : `Create ${noun}`}</Button>
+          <Button pending={pending}>{`Create ${noun}`}</Button>
         </div>
       </form>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
@@ -116,13 +116,13 @@ export function ResetPasswordButton({ action }: { action: () => Promise<ActionRe
     <div className="space-y-3">
       <Button
         variant="secondary"
-        disabled={pending}
+        pending={pending}
         onClick={() => {
           if (!window.confirm("Generate a new password? The old one stops working immediately.")) return;
           start(async () => setCreds(await action()));
         }}
       >
-        {pending ? "Resetting…" : "Reset password"}
+        Reset password
       </Button>
       {creds?.password && <Credentials username={creds.username!} password={creds.password} />}
     </div>

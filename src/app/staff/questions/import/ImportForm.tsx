@@ -8,7 +8,7 @@ export function ImportForm() {
   return (
     <form action={action} className="space-y-4">
       <input type="file" name="file" accept=".json,.csv,application/json,text/csv" required className="block text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:font-semibold file:text-brand-dark" />
-      <Button disabled={pending}>{pending ? "Importing…" : "Import"}</Button>
+      <Button pending={pending}>{"Import"}</Button>
       {state && "error" in state && state.error && <Notice tone="bad">{state.error}</Notice>}
       {state && "total" in state && (
         <div className="space-y-3">

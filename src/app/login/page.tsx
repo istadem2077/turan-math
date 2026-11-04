@@ -20,9 +20,9 @@ export default function LoginPage() {
           <Field label="Password">
             <Input name="password" type="password" autoComplete="current-password" required />
           </Field>
-          {state?.error && <p className="text-sm text-bad">{state.error}</p>}
-          <Button className="w-full" disabled={pending}>
-            {pending ? "Signing in…" : "Sign in"}
+          {state?.error && <p className="anim-fade text-sm text-bad">{state.error}</p>}
+          <Button className="w-full" pending={pending}>
+            Sign in
           </Button>
           <p className="text-center text-xs text-muted">Accounts are created by your professor.</p>
         </form>

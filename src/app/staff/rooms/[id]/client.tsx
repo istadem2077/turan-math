@@ -37,7 +37,8 @@ export function AddMembers({ roomId, students }: { roomId: string; students: { i
         {shown.length === 0 && <p className="p-3 text-sm text-muted">No matches.</p>}
       </div>
       <Button
-        disabled={pending || sel.size === 0}
+        pending={pending}
+        disabled={sel.size === 0}
         onClick={() =>
           start(async () => {
             await addRoomMembers(roomId, [...sel]);
@@ -45,7 +46,7 @@ export function AddMembers({ roomId, students }: { roomId: string; students: { i
           })
         }
       >
-        {pending ? "Adding…" : `Add ${sel.size || ""} to room`}
+        {`Add ${sel.size || ""} to room`}
       </Button>
     </div>
   );

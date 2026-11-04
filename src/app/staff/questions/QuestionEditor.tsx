@@ -115,7 +115,7 @@ export function QuestionEditor({
           <Input name="externalId" value={v.externalId} onChange={(e) => up("externalId", e.target.value)} />
         </Field>
         {state?.error && <Notice tone="bad">{state.error}</Notice>}
-        <Button disabled={pending}>{pending ? "Saving…" : "Save question"}</Button>
+        <Button pending={pending}>{"Save question"}</Button>
       </div>
       <div className="lg:sticky lg:top-6 lg:self-start">
         <div className="text-sm font-medium">Preview</div>

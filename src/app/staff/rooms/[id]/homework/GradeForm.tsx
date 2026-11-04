@@ -36,7 +36,7 @@ export function GradeForm({
         <Field label="Attach files to your response (optional)" hint="e.g. their work with your corrections.">
           <FileInput name="feedbackFiles" />
         </Field>
-        <Button disabled={pending}>{pending ? "Saving…" : initial.graded ? "Update grade & response" : "Save grade & response"}</Button>
+        <Button pending={pending}>{initial.graded ? "Update grade & response" : "Save grade & response"}</Button>
       </form>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
       {state?.message && <Notice tone="ok">{state.message}</Notice>}

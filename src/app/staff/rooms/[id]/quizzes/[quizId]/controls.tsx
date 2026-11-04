@@ -20,11 +20,11 @@ export function ScheduleForm({
         <div className="w-60">
           <DateTimeInput name="startsAt" defaultIso={defaultIso} required />
         </div>
-        <Button variant="secondary" disabled={pending}>
-          {pending ? "Saving…" : label}
+        <Button variant="secondary" pending={pending}>
+          {label}
         </Button>
       </div>
-      {state?.error && <p className="text-xs text-bad">{state.error}</p>}
+      {state?.error && <p className="anim-fade text-xs text-bad">{state.error}</p>}
     </form>
   );
 }

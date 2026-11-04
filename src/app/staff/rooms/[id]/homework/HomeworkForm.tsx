@@ -82,7 +82,7 @@ export function HomeworkForm({
       </Field>
       {state?.error && <Notice tone="bad">{state.error}</Notice>}
       {state?.message && <Notice tone="ok">{state.message}</Notice>}
-      <Button disabled={pending}>{pending ? "Saving…" : submitLabel}</Button>
+      <Button pending={pending}>{submitLabel}</Button>
     </form>
   );
 }
